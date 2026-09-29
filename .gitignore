@@ -1,0 +1,63 @@
+# R
+.Rhistory
+.RData
+.Rproj.user
+*.Rproj
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+
+# Data files (too large for GitHub)
+*.tar
+*.tar.gz
+*.zip
+*.faa
+*.fasta
+*.fa
+*.fastq
+*.gff
+*.gff3
+*.vcf
+*.bam
+*.sam
+data/
+batches/
+batches_small/
+Medicago_pangenome_annotation/
+blast_all.tsv
+diamond_clusters*.tsv
+combined_proteins*.faa
+protein_db*
+*.dmnd
+
+# Database backups
+*.sql
+*.duckdb
+*.sqlite
+
+# Logs
+*.log
+*.tmp
+diamond-tmp-*
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment
+.env
+.Renviron
+
+# R output
+*.Rout
+*.Rout.save
+# Secrets
+.Renviron
+.env
+*.key
+secrets/
