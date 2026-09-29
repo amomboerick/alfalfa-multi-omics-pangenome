@@ -24,6 +24,8 @@ This database integrates **12 high-quality *Medicago* genome assemblies** into a
 | **KEGG pathways** | 2,025,290 |
 | **KOG categories** | 855,743 |
 | **Total annotation records** | 9,163,186 |
+| **CRISPR guides** | 3,559,072 |
+| **Genes with guides** | 518,858 |
 
 ### Species Covered
 
@@ -48,6 +50,7 @@ This database integrates **12 high-quality *Medicago* genome assemblies** into a
 8. **GO Browser** – Search genes by Gene Ontology terms
 9. **KEGG Pathways** – KO numbers and pathway catalog
 10. **KOG Classes** – COG functional category distribution
+12. **CRISPR Guides** – 3.5M guide RNAs with on/off-target scores
 11. **Annotation Search** – Unified search across all annotation types
 12. **AI Assistant** – Natural language → SQL chatbot
 13. **Statistics** – Interactive charts and distributions

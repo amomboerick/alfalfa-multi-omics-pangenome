@@ -52,11 +52,18 @@ Schema:
   kegg_ko(ko_id, gene_id, accession_id, ko_number)
   kegg_pathways(pathway_id, gene_id, accession_id, pathway_code)
   kog_annotations(kog_id, gene_id, accession_id, cog_letter)
+  crispr_guides(guide_id, gene_id, accession_id, genome, gene_name,
+                rank_in_gene, chrom, strand, gene_strand, spacer_seq, pam_seq,
+                spacer_start, spacer_end, pam_start, pam_end, cut_site,
+                gc_pct, n_genome_hits, uniqueness, specificity_class)
 
 Notes:
 - cluster_type values: 'core', 'soft_core', 'dispensable', 'private', 'singleton'
 - 12 accessions, 823,838 genes, ~217,000 clusters
 - 5.8M GO annotations, 449K KEGG KOs, 2M KEGG pathways, 856K KOG
+- 3.56M CRISPR guides (3.5M UNIQUE, 48K MULTI) targeting 518,858 genes
+- CRISPR fields: spacer_seq=20nt guide, pam_seq=PAM, uniqueness=UNIQUE/MULTI,
+  gc_pct=GC%, rank_in_gene=rank among guides for that gene
 - Always use LIMIT (default 100) unless the user asks for aggregate counts.
 "
 
@@ -259,7 +266,9 @@ ui <- fluidPage(
           downloadButton("dl_go",   "GO Annotations (CSV)"),
           downloadButton("dl_kegg", "KEGG KO (CSV)"),
           downloadButton("dl_path", "KEGG Pathways (CSV)"),
-          downloadButton("dl_kog",  "KOG (CSV)")),
+          downloadButton("dl_kog",  "KOG (CSV)"),
+          br(), br(),
+          downloadButton("dl_crispr", "CRISPR Guides (CSV)")),
 
         # ============================================================
         # MULTI-OMICS ANNOTATION TABS (NEW)
@@ -353,6 +362,33 @@ ui <- fluidPage(
           br(),
           h4("KOG Category"),
           DTOutput("unified_kog")
+        ),
+
+
+        # ============================================================
+        # CRISPR GUIDES
+        # ============================================================
+        tabPanel("CRISPR Guides",
+          br(), h3("\U0001F9EC CRISPR Guide RNA Browser"),
+          helpText("3.5 million guide RNAs targeting 518,858 genes across 12 accessions."),
+          br(),
+          fluidRow(
+            column(4,
+              textInput("crispr_query", "Search by gene name or guide sequence:",
+                        placeholder = "e.g. Mara000001 or GTTCAACCTGT")
+            ),
+            column(4,
+              selectInput("crispr_accession", "Filter by accession:",
+                          choices = c("All"), selected = "All")
+            ),
+            column(4,
+              selectInput("crispr_uniqueness", "Filter by uniqueness:",
+                          choices = c("All", "UNIQUE", "MULTI"), selected = "All")
+            )
+          ),
+          br(),
+          h4("Matching Guides"),
+          DTOutput("crispr_table")
         ),
 
         # ============================================================
@@ -1047,6 +1083,47 @@ server <- function(input, output, session) {
     datatable(dbGetQuery(con, q), options = list(pageLength = 10, scrollX = TRUE))
   })
 
+
+  # ============================================================
+  # CRISPR GUIDES
+  # ============================================================
+  observe({
+    con <- connect_db(); on.exit(dbDisconnect(con))
+    acc <- dbGetQuery(con, "SELECT accession_name FROM accessions ORDER BY accession_name")$accession_name
+    updateSelectInput(session, "crispr_accession", choices = c("All", acc))
+  })
+
+  output$crispr_table <- renderDT({
+    req(input$crispr_query)
+    con <- connect_db(); on.exit(dbDisconnect(con))
+
+    acc_filter <- ""
+    if (!is.null(input$crispr_accession) && input$crispr_accession != "All") {
+      acc_filter <- sprintf(" AND a.accession_name = '%s'", input$crispr_accession)
+    }
+
+    uniq_filter <- ""
+    if (!is.null(input$crispr_uniqueness) && input$crispr_uniqueness != "All") {
+      uniq_filter <- sprintf(" AND cg.uniqueness = '%s'", input$crispr_uniqueness)
+    }
+
+    q <- sprintf("
+      SELECT cg.gene_name, a.accession_name, a.species,
+             cg.rank_in_gene, cg.spacer_seq, cg.pam_seq,
+             cg.chrom, cg.spacer_start, cg.cut_site,
+             cg.gc_pct, cg.uniqueness, cg.specificity_class
+      FROM crispr_guides cg
+      JOIN accessions a ON cg.accession_id = a.accession_id
+      WHERE (cg.gene_name ILIKE '%%%s%%' OR cg.spacer_seq ILIKE '%%%s%%')
+      %s %s
+      ORDER BY cg.gene_name, cg.rank_in_gene
+      LIMIT 1000
+    ", input$crispr_query, input$crispr_query, acc_filter, uniq_filter)
+
+    datatable(dbGetQuery(con, q), options = list(pageLength = 20, scrollX = TRUE))
+  })
+
+
   # ============================================================
   # AI ASSISTANT
   # ============================================================
@@ -1342,6 +1419,12 @@ server <- function(input, output, session) {
     con <- connect_db(); on.exit(dbDisconnect(con))
     write.csv(dbGetQuery(con, "SELECT * FROM kog_annotations"), f, row.names = FALSE)
   })
+
+  output$dl_crispr <- downloadHandler("crispr_guides.csv", function(f) {
+    con <- connect_db(); on.exit(dbDisconnect(con))
+    write.csv(dbGetQuery(con, "SELECT * FROM crispr_guides LIMIT 500000"), f, row.names = FALSE)
+  })
+
 }
 
 # ============================================================
