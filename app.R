@@ -464,7 +464,9 @@ ui <- fluidPage(
         column(2, h4("Resources"), tags$ul(
           tags$li(tags$a(href = "#", shiny::icon("book"), " Docs")),
           tags$li(tags$a(href = "#", shiny::icon("file-code"), " API")),
-          tags$li(tags$a(href = "#", shiny::icon("github"), " GitHub")),
+          tags$li(tags$a(href = "https://github.com/amomboerick/alfalfa-multi-omics-pangenome",
+                         target = "_blank",
+                         shiny::icon("github"), " GitHub")),
           tags$li(tags$a(href = "#", shiny::icon("download"), " Downloads")))),
         column(2, h4("About"), tags$ul(
           tags$li(tags$a(href = "#", "Consortium")),
