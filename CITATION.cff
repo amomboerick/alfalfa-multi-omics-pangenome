@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use this resource, please cite it as below."
+title: "Alfalfa Multi-Omics Pan-Genome Database"
+abstract: "A comprehensive multi-omics resource for the Medicago genus, integrating 12 high-quality genome assemblies with deep functional annotation (GO, KEGG, KOG) and CRISPR guide design."
+authors:
+  - family-names: "Amombo"
+    given-names: "Erick"
+    email: "amomboeric@gmail.com"
+version: "2.0.0"
+date-released: "2026-09-29"
+license: MIT
+repository-code: "https://github.com/amomboerick/alfalfa-multi-omics-pangenome"
+keywords:
+  - alfalfa
+  - Medicago sativa
+  - pan-genome
+  - multi-omics
+  - CRISPR
+  - GO
+  - KEGG
+  - KOG

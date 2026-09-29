@@ -1,5 +1,5 @@
-# Alfalfa Pan-Genome Database - R Shiny App
-# Full multi-omics version with GO / KEGG / KOG annotation tabs
+# Alfalfa Multi-Omics Pan-Genome Database - R Shiny App
+# Publication-ready version with masthead + citation modal + animated counters
 
 library(shiny)
 library(shinythemes)
@@ -46,8 +46,6 @@ Schema:
                     presence_across_accessions)
   cluster_membership(membership_id, cluster_id, gene_id, accession_id)
   gene_presence_absence(pa_id, cluster_id, accession_id, is_present, copy_number)
-
-  -- NEW multi-omics tables:
   go_annotations(go_ann_id, gene_id, accession_id, go_term)
   kegg_ko(ko_id, gene_id, accession_id, ko_number)
   kegg_pathways(pathway_id, gene_id, accession_id, pathway_code)
@@ -61,16 +59,13 @@ Notes:
 - cluster_type values: 'core', 'soft_core', 'dispensable', 'private', 'singleton'
 - 12 accessions, 823,838 genes, ~217,000 clusters
 - 5.8M GO annotations, 449K KEGG KOs, 2M KEGG pathways, 856K KOG
-- 3.56M CRISPR guides (3.5M UNIQUE, 48K MULTI) targeting 518,858 genes
-- CRISPR fields: spacer_seq=20nt guide, pam_seq=PAM, uniqueness=UNIQUE/MULTI,
-  gc_pct=GC%, rank_in_gene=rank among guides for that gene
+- 3.56M CRISPR guides targeting 518,858 genes
 - Always use LIMIT (default 100) unless the user asks for aggregate counts.
 "
 
 ask_groq_for_sql <- function(question) {
   api_key <- Sys.getenv("GROQ_API_KEY")
   if (nchar(api_key) < 10) return(list(ok = FALSE, error = "GROQ_API_KEY not set"))
-
   body <- list(
     model = "openai/gpt-oss-120b",
     messages = list(
@@ -80,7 +75,6 @@ ask_groq_for_sql <- function(question) {
     temperature = 0.1,
     max_tokens = 800
   )
-
   res <- tryCatch(
     POST("https://api.groq.com/openai/v1/chat/completions",
          add_headers(Authorization = paste("Bearer", api_key)),
@@ -91,8 +85,7 @@ ask_groq_for_sql <- function(question) {
   )
   if (is.null(res)) return(list(ok = FALSE, error = "Network error"))
   if (status_code(res) != 200) {
-    msg <- tryCatch(content(res, "parsed")$error$message,
-                    error = function(e) "Unknown error")
+    msg <- tryCatch(content(res, "parsed")$error$message, error = function(e) "Unknown error")
     return(list(ok = FALSE, error = paste("Groq API error:", msg)))
   }
   txt <- content(res, "parsed")$choices[[1]]$message$content
@@ -109,34 +102,131 @@ ask_groq_for_sql <- function(question) {
 ui <- fluidPage(
   theme = shinytheme("flatly"),
 
-  tags$head(tags$style(HTML("
+  tags$head(
+    tags$link(rel = "preconnect", href = "https://fonts.googleapis.com"),
+    tags$link(rel = "preconnect", href = "https://fonts.gstatic.com", crossorigin = NA),
+    tags$link(rel = "stylesheet",
+              href = "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"),
+    tags$script(src = "counters.js"),
+    tags$style(HTML("
     html, body { min-height: 100%; }
-    body { background: #e8efe9; display: flex; flex-direction: column; min-height: 100vh; }
-    .main-wrapper { flex: 1 0 auto; }
-    .header {
-      background: linear-gradient(145deg, #08261a, #1f5e4a);
-      color: white; padding: 1.5rem 2rem;
-      border-bottom: 6px solid #f5b342; margin-bottom: 20px;
+    body {
+      background: #e8efe9;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
-    .header h1 { margin: 0; font-weight: 700; color: white; }
-    .header h1 i { color: #f5b342; }
-    .header p { color: #e0efe3; margin: 4px 0 0 0; }
+    .main-wrapper { flex: 1 0 auto; }
+
+    .masthead {
+      background: linear-gradient(135deg, #0B3B2C 0%, #1A4D38 60%, #2B7A5E 100%);
+      color: white;
+      padding: 2rem 2.5rem 1.5rem 2.5rem;
+      border-bottom: 6px solid #F5B342;
+      position: relative;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+    .masthead::before {
+      content: '';
+      position: absolute;
+      top: -50%; right: -10%;
+      width: 400px; height: 400px;
+      background: radial-gradient(circle, rgba(245,179,66,0.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .masthead-inner {
+      max-width: 1400px;
+      margin: 0 auto;
+      position: relative;
+      z-index: 2;
+    }
+    .masthead h1 {
+      font-weight: 800;
+      font-size: 2.3rem;
+      letter-spacing: -0.02em;
+      margin: 0;
+      color: white;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .masthead h1 .logo-leaf { color: #F5B342; font-size: 1.9rem; }
+    .masthead .subtitle {
+      font-size: 1.05rem;
+      color: #d4e3db;
+      margin-top: 8px;
+      font-weight: 400;
+    }
+    .masthead .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+      align-items: center;
+    }
+    .meta-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(245,179,66,0.4);
+      color: #F5B342;
+      padding: 4px 14px;
+      border-radius: 40px;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+    .meta-badge .val { color: white; margin-left: 4px; }
+    .cite-btn {
+      background: #F5B342;
+      color: #0B3B2C !important;
+      border: none;
+      padding: 8px 22px;
+      border-radius: 40px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(245,179,66,0.3);
+    }
+    .cite-btn:hover {
+      background: #fccf6b;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(245,179,66,0.4);
+    }
+
     .stat-box {
-      background: white; border-left: 8px solid #1a4d38; border-radius: 12px;
-      padding: 15px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      background: white;
+      border-left: 8px solid #1a4d38;
+      border-radius: 12px;
+      padding: 15px;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
       margin-bottom: 15px;
     }
-    .stat-box h2 { color: #1a4d38; font-size: 2.2rem; margin: 0; }
-    .stat-box p  { color: #08261a; margin: 0; font-weight: 600; }
+    .stat-box h2 { color: #1a4d38; font-size: 2.2rem; margin: 0; font-weight: 800; }
+    .stat-box p  { color: #08261a; margin: 0; font-weight: 600; font-size: 0.9rem; }
+
     .quick-card {
-      background: white; border-left: 6px solid #f5b342; border-radius: 10px;
-      padding: 16px; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.04);
-      transition: 0.15s; cursor: pointer;
+      background: white;
+      border-left: 6px solid #f5b342;
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+      transition: 0.15s;
+      cursor: pointer;
     }
     .quick-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.08); }
     .quick-card h4 { color: #1a4d38; margin: 0 0 6px 0; font-weight: 700; }
     .quick-card p  { color: #3d5a4a; margin: 0; font-size: 0.9rem; }
     .quick-card i  { color: #d48c1a; font-size: 1.6rem; margin-right: 10px; }
+
     .badge { display:inline-block; padding:2px 10px; border-radius:40px;
              font-size:0.75rem; font-weight:700; margin-left:6px; }
     .badge-core { background:#1a4d38; color:white; }
@@ -144,15 +234,20 @@ ui <- fluidPage(
     .badge-dispensable { background:#d48c1a; color:white; }
     .badge-private { background:#8b5e9b; color:white; }
     .badge-singleton { background:#8fa7b3; color:white; }
+
     .ai-msg-user { background: #e8efe9; border-left: 4px solid #1a4d38;
                    padding: 10px 14px; border-radius: 8px; margin-bottom: 10px; }
     .ai-msg-bot { background: #fff7e6; border-left: 4px solid #f5b342;
                   padding: 10px 14px; border-radius: 8px; margin-bottom: 10px; }
     .ai-sql { background: #08261a; color: #b8e3b0; padding: 12px; border-radius: 6px;
               font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; margin: 8px 0; }
+
     .footer {
-      flex-shrink: 0; background: #08261a; color: #cde0d3;
-      padding: 2rem 2rem 1rem 2rem; margin-top: 40px;
+      flex-shrink: 0;
+      background: #08261a;
+      color: #cde0d3;
+      padding: 2rem 2rem 1rem 2rem;
+      margin-top: 40px;
       border-top: 6px solid #f5b342;
     }
     .footer h4 { color: #f5b342; font-size: 1rem; font-weight: 700;
@@ -162,44 +257,84 @@ ui <- fluidPage(
     .footer a:hover { color: #f5b342; }
     .footer ul { list-style: none; padding: 0; }
     .footer ul li { padding: 3px 0; }
-    .footer-bottom { border-top: 1px solid #1f4a38; margin-top: 20px; padding-top: 12px;
-                     text-align: center; font-size: 0.8rem; color: #7a9587; }
+    .footer-bottom {
+      border-top: 1px solid #1f4a38; margin-top: 20px; padding-top: 12px;
+      text-align: center; font-size: 0.8rem; color: #7a9587;
+    }
     .footer-bottom strong { color: #f5b342; }
   "))),
 
   div(class = "main-wrapper",
 
-    div(class = "header",
-      div(class = "container-fluid",
-        h1(shiny::icon("leaf"), "Alfalfa Pan-Genome Database"),
-        p(shiny::icon("dna"), "Medicago super-pan-genome \u00b7 12 accessions \u00b7 823,838 genes \u00b7 multi-omics + AI")
+    div(class = "masthead",
+      div(class = "masthead-inner",
+        h1(
+          span(class = "logo-leaf", shiny::icon("leaf")),
+          "Alfalfa Multi-Omics Pan-Genome Database"
+        ),
+        div(class = "subtitle",
+          shiny::icon("dna"),
+          " A comprehensive genomic, transcriptomic, and CRISPR resource for the Medicago genus"
+        ),
+        div(class = "meta-row",
+          span(class = "meta-badge",
+            shiny::icon("code-branch"), "Version",
+            span(class = "val", "2.0")),
+          span(class = "meta-badge",
+            shiny::icon("calendar"), "Updated",
+            span(class = "val", as.character(Sys.Date()))),
+          span(class = "meta-badge",
+            shiny::icon("globe"), "Species",
+            span(class = "val", "6")),
+          span(class = "meta-badge",
+            shiny::icon("dna"), "Genes",
+            span(class = "val", "823,838")),
+          span(class = "meta-badge",
+            shiny::icon("microscope"), "Annotations",
+            span(class = "val", "13M+")),
+          span(class = "meta-badge",
+            shiny::icon("cut"), "CRISPR guides",
+            span(class = "val", "3.5M")),
+          actionButton("cite_btn",
+                       label = tagList(shiny::icon("quote-left"), "Cite This Resource"),
+                       class = "cite-btn")
+        )
       )
     ),
 
     div(class = "container-fluid",
       tabsetPanel(id = "tabs",
 
-        # ============================================================
-        # HOME
-        # ============================================================
+        # ============ HOME ============
         tabPanel("Home",
           br(),
           fluidRow(
-            column(3, div(class = "stat-box", h2(textOutput("n_acc")),  p("Accessions"))),
-            column(3, div(class = "stat-box", h2(textOutput("n_spec")), p("Species"))),
-            column(3, div(class = "stat-box", h2(textOutput("n_genes")),p("Genes"))),
-            column(3, div(class = "stat-box", h2(textOutput("n_clu")),  p("Pan-Gene Clusters")))
+            column(3, div(class = "stat-box", h2(uiOutput("n_acc_animated")),  p("Accessions"))),
+            column(3, div(class = "stat-box", h2(uiOutput("n_spec_animated")), p("Species"))),
+            column(3, div(class = "stat-box", h2(uiOutput("n_genes_animated")),p("Genes"))),
+            column(3, div(class = "stat-box", h2(uiOutput("n_clu_animated")),  p("Pan-Gene Clusters")))
           ),
           fluidRow(
-            column(3, div(class = "stat-box", h2(textOutput("n_go")),   p("GO annotations"))),
-            column(3, div(class = "stat-box", h2(textOutput("n_ko")),   p("KEGG KO"))),
-            column(3, div(class = "stat-box", h2(textOutput("n_path")), p("KEGG pathways"))),
-            column(3, div(class = "stat-box", h2(textOutput("n_kog")),  p("KOG categories")))
+            column(3, div(class = "stat-box", h2(uiOutput("n_go_animated")),   p("GO annotations"))),
+            column(3, div(class = "stat-box", h2(uiOutput("n_ko_animated")),   p("KEGG KO"))),
+            column(3, div(class = "stat-box", h2(uiOutput("n_path_animated")), p("KEGG pathways"))),
+            column(3, div(class = "stat-box", h2(uiOutput("n_kog_animated")),  p("KOG categories")))
+          ),
+          fluidRow(
+            column(3, div(class = "stat-box", h2(uiOutput("n_crispr_animated")), p("CRISPR guides"))),
+            column(3, div(class = "stat-box", h2(uiOutput("n_crispr_genes_animated")), p("Genes with guides"))),
+            column(6, div(class = "stat-box", h2("16"), p("Interactive tabs")))
           ),
           br(),
-          h3("\U0001F4CA Cluster Breakdown"),
-          plotOutput("cluster_plot", height = "380px"),
+          h3("\U0001F4CA Figure 1: Pan-Genome Overview"),
+          helpText("Summary of the 12-accession Medicago multi-omics pan-genome."),
+          div(style = "background:white; padding:20px; border-radius:12px; box-shadow:0 4px 16px rgba(0,0,0,0.05);",
+            plotOutput("hero_figure", height = "820px")
+          ),
           br(),
+          downloadButton("dl_hero_figure", "Download Figure 1 as PNG",
+                         style = "background:#1a4d38; color:white; font-weight:700; padding:8px 20px; border-radius:8px; border:none;"),
+          br(), br(),
           h3("\U0001F680 Quick Actions"),
           br(),
           fluidRow(
@@ -212,9 +347,9 @@ ui <- fluidPage(
               h4(shiny::icon("sitemap"), "GO Browser"),
               p("Search genes by Gene Ontology terms."))),
             column(3, div(class = "quick-card",
-              onclick = "Shiny.setInputValue('nav_to','kegg',{priority:'event'})",
-              h4(shiny::icon("project-diagram"), "KEGG Pathways"),
-              p("Browse KEGG pathways and their genes."))),
+              onclick = "Shiny.setInputValue('nav_to','crispr',{priority:'event'})",
+              h4(shiny::icon("cut"), "CRISPR Guides"),
+              p("3.5M guide RNAs across 518,858 genes."))),
             column(3, div(class = "quick-card",
               onclick = "Shiny.setInputValue('nav_to','ai',{priority:'event'})",
               h4(shiny::icon("robot"), "AI Assistant"),
@@ -222,9 +357,7 @@ ui <- fluidPage(
           )
         ),
 
-        # ============================================================
-        # DATA TABS
-        # ============================================================
+        # ============ DATA TABS ============
         tabPanel("Accessions",
           br(), h3("\U0001F331 The 12 Medicago Accessions"),
           DTOutput("accessions_table")),
@@ -246,9 +379,6 @@ ui <- fluidPage(
           selectInput("pa_accession", "Select accession:", choices = NULL),
           DTOutput("pa_table")),
 
-        # ============================================================
-        # TOOLS
-        # ============================================================
         tabPanel("Search",
           br(), h3("\U0001F50D Search Genes"),
           textInput("gene_query", "Search gene name (partial match):", placeholder = "e.g. Mara000007"),
@@ -270,130 +400,76 @@ ui <- fluidPage(
           br(), br(),
           downloadButton("dl_crispr", "CRISPR Guides (CSV)")),
 
-        # ============================================================
-        # MULTI-OMICS ANNOTATION TABS (NEW)
-        # ============================================================
         tabPanel("GO Browser",
           br(), h3("\U0001F9EC Gene Ontology Browser"),
-          helpText("Search genes by GO term. Example terms: GO:0006952 (defense response), GO:0003677 (DNA binding), GO:0008150 (biological process)."),
+          helpText("Search genes by GO term. Example: GO:0006952 (defense response)."),
           br(),
           fluidRow(
-            column(6,
-              textInput("go_query", "Search by GO term or gene name:",
-                        placeholder = "e.g. GO:0006952 or Mara000007")
-            ),
-            column(6,
-              selectInput("go_accession", "Filter by accession:",
-                          choices = c("All"), selected = "All")
-            )
+            column(6, textInput("go_query", "Search by GO term or gene name:",
+                                placeholder = "e.g. GO:0006952 or Mara000007")),
+            column(6, selectInput("go_accession", "Filter by accession:",
+                                  choices = c("All"), selected = "All"))
           ),
-          br(),
-          h4("GO Term Distribution"),
+          br(), h4("GO Term Distribution"),
           plotOutput("go_distribution", height = "300px"),
-          br(),
-          h4("Matching Annotations"),
-          DTOutput("go_table")
-        ),
+          br(), h4("Matching Annotations"),
+          DTOutput("go_table")),
 
         tabPanel("KEGG Pathways",
           br(), h3("\U0001F9EC KEGG Pathway Browser"),
-          helpText("Browse KEGG pathways and see which genes belong to each."),
           br(),
           fluidRow(
-            column(6,
-              textInput("kegg_query", "Search by KO number or gene name:",
-                        placeholder = "e.g. K15285 or Mara000006")
-            ),
-            column(6,
-              selectInput("kegg_accession", "Filter by accession:",
-                          choices = c("All"), selected = "All")
-            )
+            column(6, textInput("kegg_query", "Search by KO number or gene name:",
+                                placeholder = "e.g. K15285 or Mara000006")),
+            column(6, selectInput("kegg_accession", "Filter by accession:",
+                                  choices = c("All"), selected = "All"))
           ),
           br(),
           fluidRow(
-            column(6,
-              h4("KO Number Distribution"),
-              plotOutput("ko_distribution", height = "300px")
-            ),
-            column(6,
-              h4("Pathway Distribution (top 20)"),
-              plotOutput("path_distribution", height = "300px")
-            )
+            column(6, h4("KO Number Distribution"), plotOutput("ko_distribution", height = "300px")),
+            column(6, h4("Pathway Distribution (top 20)"), plotOutput("path_distribution", height = "300px"))
           ),
-          br(),
-          h4("Matching Annotations"),
-          DTOutput("kegg_table")
-        ),
+          br(), h4("Matching Annotations"),
+          DTOutput("kegg_table")),
 
         tabPanel("KOG Classes",
           br(), h3("\U0001F9EC KOG / COG Functional Categories"),
-          helpText("COG letters: J=Translation, K=Transcription, L=Replication, D=Cell cycle, T=Signal, M=Cell wall, U=Trafficking, O=Post-translational, C=Energy, G=Carbohydrate, E=Amino acid, F=Nucleotide, H=Coenzyme, I=Lipid, P=Inorganic ion, Q=Secondary metabolites, R=General function, S=Unknown, V=Defense, W=Extracellular, Y=Nuclear, Z=Cytoskeleton, A=RNA processing, B=Chromatin."),
           br(),
           fluidRow(
-            column(6,
-              selectInput("kog_accession", "Filter by accession:",
-                          choices = c("All"), selected = "All")
-            ),
+            column(6, selectInput("kog_accession", "Filter by accession:",
+                                  choices = c("All"), selected = "All")),
             column(6, br(), br(), h4("Total genes with KOG:", textOutput("kog_total", inline = TRUE)))
           ),
-          br(),
-          h4("KOG Category Distribution"),
+          br(), h4("KOG Category Distribution"),
           plotOutput("kog_chart", height = "500px"),
-          br(),
-          h4("KOG Annotations Table"),
-          DTOutput("kog_table")
-        ),
+          br(), h4("KOG Annotations Table"),
+          DTOutput("kog_table")),
 
         tabPanel("Annotation Search",
           br(), h3("\U0001F50D Unified Annotation Search"),
-          helpText("Search across genes, GO, KEGG, and KOG simultaneously."),
           br(),
           textInput("unified_query", "Enter a gene name or ID:",
                     placeholder = "e.g. Mara000007", width = "400px"),
-          br(),
-          h4("Gene Info"),
-          DTOutput("unified_gene"),
-          br(),
-          h4("GO Annotations"),
-          DTOutput("unified_go"),
-          br(),
-          h4("KEGG KO + Pathways"),
-          DTOutput("unified_kegg"),
-          br(),
-          h4("KOG Category"),
-          DTOutput("unified_kog")
-        ),
+          br(), h4("Gene Info"), DTOutput("unified_gene"),
+          br(), h4("GO Annotations"), DTOutput("unified_go"),
+          br(), h4("KEGG KO + Pathways"), DTOutput("unified_kegg"),
+          br(), h4("KOG Category"), DTOutput("unified_kog")),
 
-
-        # ============================================================
-        # CRISPR GUIDES
-        # ============================================================
         tabPanel("CRISPR Guides",
           br(), h3("\U0001F9EC CRISPR Guide RNA Browser"),
           helpText("3.5 million guide RNAs targeting 518,858 genes across 12 accessions."),
           br(),
           fluidRow(
-            column(4,
-              textInput("crispr_query", "Search by gene name or guide sequence:",
-                        placeholder = "e.g. Mara000001 or GTTCAACCTGT")
-            ),
-            column(4,
-              selectInput("crispr_accession", "Filter by accession:",
-                          choices = c("All"), selected = "All")
-            ),
-            column(4,
-              selectInput("crispr_uniqueness", "Filter by uniqueness:",
-                          choices = c("All", "UNIQUE", "MULTI"), selected = "All")
-            )
+            column(4, textInput("crispr_query", "Search by gene name or guide sequence:",
+                                placeholder = "e.g. Mara000001 or GTTCAACCTGT")),
+            column(4, selectInput("crispr_accession", "Filter by accession:",
+                                  choices = c("All"), selected = "All")),
+            column(4, selectInput("crispr_uniqueness", "Filter by uniqueness:",
+                                  choices = c("All", "UNIQUE", "MULTI"), selected = "All"))
           ),
-          br(),
-          h4("Matching Guides"),
-          DTOutput("crispr_table")
-        ),
+          br(), h4("Matching Guides"),
+          DTOutput("crispr_table")),
 
-        # ============================================================
-        # AI ASSISTANT
-        # ============================================================
         tabPanel("AI Assistant",
           br(), h3("\U0001F916 Ask the Database"),
           helpText("Ask a question in plain English. The AI generates SQL, runs it, and shows the results."),
@@ -403,11 +479,10 @@ ui <- fluidPage(
               h4(shiny::icon("lightbulb"), "Example questions:"),
               tags$ul(
                 tags$li("\"How many core clusters are there?\""),
-                tags$li("\"Show me the 10 largest pan-gene families\""),
+                tags$li("\"Show me the top 10 largest pan-gene families\""),
                 tags$li("\"Which GO terms are most common in M_arabica?\""),
-                tags$li("\"How many genes have KEGG KO K15285?\""),
-                tags$li("\"What are the top 10 KOG categories?\""),
-                tags$li("\"List all genes in M_sativa_ZM4 that have GO:0006952\"")
+                tags$li("\"Show me the top 10 CRISPR guides for Mara000001\""),
+                tags$li("\"How many UNIQUE CRISPR guides are there?\"")
               )
             )
           ),
@@ -422,12 +497,8 @@ ui <- fluidPage(
                          style = "background:#e0e8e4; color:#08261a; font-weight:600; border:2px solid #c8d5cd; border-radius:8px; padding:8px 20px; margin-left:8px;")
           ),
           br(),
-          uiOutput("ai_conversation")
-        ),
+          uiOutput("ai_conversation")),
 
-        # ============================================================
-        # ANALYTICS
-        # ============================================================
         tabPanel("Statistics",
           br(), h3("\U0001F4CA Pan-Genome Statistics"), br(),
           fluidRow(
@@ -461,7 +532,6 @@ ui <- fluidPage(
 
         tabPanel("Species Comparison",
           br(), h3("\U0001F30D Cross-Accession Cluster Sharing"),
-          helpText("Cell value = number of pan-gene clusters shared between the two accessions."),
           br(),
           plotOutput("species_matrix_plot", height = "700px"),
           br(), h4("Shared Cluster Counts (Table View)"),
@@ -469,7 +539,6 @@ ui <- fluidPage(
 
         tabPanel("Heatmap",
           br(), h3("\U0001F7E9 Presence/Absence Heatmap (Top 100 Clusters)"),
-          helpText("Rows = top 100 clusters, columns = 12 accessions. Green = present, gray = absent."),
           br(),
           selectInput("heatmap_type", "Filter clusters by type:",
                       choices = c("core", "soft_core", "dispensable", "All"),
@@ -479,31 +548,30 @@ ui <- fluidPage(
     )
   ),
 
-  # ============================================================
-  # FOOTER
-  # ============================================================
   div(class = "footer",
     div(class = "container-fluid",
       fluidRow(
         column(4,
-          h4(shiny::icon("leaf"), " Alfalfa Pan-Genome Database"),
-          p("A comprehensive multi-omics resource for exploring the structural and functional diversity of the Medicago genus."),
+          h4(shiny::icon("leaf"), " Alfalfa Multi-Omics Pan-Genome Database"),
+          p("A comprehensive multi-omics resource for the Medicago genus."),
           p(style = "color:#7a9587; margin-top:10px; font-size:0.8rem;",
-            shiny::icon("database"), " PostgreSQL + R Shiny + Groq AI")
+            shiny::icon("database"), " Powered by PostgreSQL + R Shiny + Groq AI")
         ),
         column(2, h4("Data"), tags$ul(
           tags$li("12 Accessions"), tags$li("823,838 Genes"),
-          tags$li("217,122 Clusters"), tags$li("9.1M Annotations"))),
+          tags$li("217,122 Clusters"), tags$li("13M+ Annotations"))),
         column(2, h4("Analysis"), tags$ul(
           tags$li("Pan-Genome"), tags$li("GO / KEGG / KOG"),
-          tags$li("Assembly Quality"), tags$li("AI Assistant"))),
+          tags$li("CRISPR Guides"), tags$li("AI Assistant"))),
         column(2, h4("Resources"), tags$ul(
-          tags$li(tags$a(href = "#", shiny::icon("book"), " Docs")),
-          tags$li(tags$a(href = "#", shiny::icon("file-code"), " API")),
           tags$li(tags$a(href = "https://github.com/amomboerick/alfalfa-multi-omics-pangenome",
-                         target = "_blank",
-                         shiny::icon("github"), " GitHub")),
-          tags$li(tags$a(href = "#", shiny::icon("download"), " Downloads")))),
+                         target = "_blank", shiny::icon("book"), " Documentation")),
+          tags$li(tags$a(href = "https://github.com/amomboerick/alfalfa-multi-omics-pangenome",
+                         target = "_blank", shiny::icon("file-code"), " Source Code")),
+          tags$li(tags$a(href = "https://github.com/amomboerick/alfalfa-multi-omics-pangenome",
+                         target = "_blank", shiny::icon("github"), " GitHub")),
+          tags$li(tags$a(href = "https://github.com/amomboerick/alfalfa-multi-omics-pangenome/archive/refs/heads/main.zip",
+                         target = "_blank", shiny::icon("download"), " Downloads")))),
         column(2, h4("About"), tags$ul(
           tags$li(tags$a(href = "#", "Consortium")),
           tags$li(tags$a(href = "#", "Contact")),
@@ -512,9 +580,9 @@ ui <- fluidPage(
       ),
       div(class = "footer-bottom",
         HTML(paste0(
-          "\u00A9 2026 <strong>Alfalfa Pan-Genome Database Consortium</strong> \u00b7 ",
-          "Version 2.0 \u00b7 Last updated: ", Sys.Date(),
-          " \u00b7 Built with <strong>R Shiny</strong> + <strong>PostgreSQL</strong> + <strong>Groq AI</strong>"
+          "\u00A9 2026 <strong>Alfalfa Multi-Omics Pan-Genome Database Consortium</strong> \u00B7 ",
+          "Version 2.0 \u00B7 Last updated: ", Sys.Date(),
+          " \u00B7 Built with <strong>R Shiny</strong> + <strong>PostgreSQL</strong> + <strong>Groq AI</strong>"
         ))
       )
     )
@@ -526,6 +594,103 @@ ui <- fluidPage(
 # ============================================================
 server <- function(input, output, session) {
 
+  # ---------- Citation modal ----------
+  observeEvent(input$cite_btn, {
+    showModal(modalDialog(
+      title = tagList(shiny::icon("quote-left"), " Cite the Alfalfa Multi-Omics Pan-Genome Database"),
+      size = "l",
+      easyClose = TRUE,
+      footer = modalButton("Close"),
+      HTML(paste0(
+        "<h4 style='color:#0B3B2C; margin-bottom:14px;'>Plain Text Citation</h4>",
+        "<div style='background:#f7faf5; padding:16px; border-left:6px solid #F5B342;",
+        "     border-radius:8px; font-family:monospace; font-size:0.9rem; line-height:1.6;'>",
+        "Alfalfa Multi-Omics Pan-Genome Database Consortium (2026). ",
+        "<i>A comprehensive multi-omics pan-genome resource for the Medicago genus.</i> ",
+        "Version 2.0. Available at: https://github.com/amomboerick/alfalfa-multi-omics-pangenome",
+        "</div>",
+        "<h4 style='color:#0B3B2C; margin-top:24px; margin-bottom:14px;'>BibTeX</h4>",
+        "<div style='background:#0B3B2C; color:#b8e3b0; padding:16px; border-radius:8px;",
+        "     font-family:monospace; font-size:0.85rem; white-space:pre; overflow-x:auto;'>",
+        "@misc{alfalfa_pangenome_2026,\n",
+        "  title        = {Alfalfa Multi-Omics Pan-Genome Database},\n",
+        "  author       = {{Alfalfa Multi-Omics Pan-Genome Database Consortium}},\n",
+        "  year         = {2026},\n",
+        "  version      = {2.0},\n",
+        "  howpublished = {\\url{https://github.com/amomboerick/alfalfa-multi-omics-pangenome}},\n",
+        "  note         = {12 accessions, 823,838 genes, 217,122 pan-gene clusters}\n",
+        "}",
+        "</div>",
+        "<h4 style='color:#0B3B2C; margin-top:24px; margin-bottom:14px;'>Contact</h4>",
+        "<p style='font-size:0.9rem;'>For questions: <b>Erick Amombo</b> \u2014 amomboeric@gmail.com</p>"
+      ))
+    ))
+  })
+
+  # ---------- Animated stat outputs ----------
+  make_counter_ui <- function(numeric_value) {
+    formatted <- format(numeric_value, big.mark = ",", scientific = FALSE)
+    session$sendCustomMessage("runCounters", list())
+    tags$span(
+      class = "counter-value",
+      `data-animate-counter` = "true",
+      `data-target` = numeric_value,
+      formatted
+    )
+  }
+
+  output$n_acc_animated <- renderUI({
+    con <- connect_db(); on.exit(dbDisconnect(con))
+    n <- as.numeric(dbGetQuery(con, "SELECT COUNT(*)::text AS n FROM accessions")$n)
+    make_counter_ui(n)
+  })
+  output$n_spec_animated <- renderUI({
+    con <- connect_db(); on.exit(dbDisconnect(con))
+    n <- as.numeric(dbGetQuery(con, "SELECT COUNT(DISTINCT species)::text AS n FROM accessions")$n)
+    make_counter_ui(n)
+  })
+  output$n_genes_animated <- renderUI({
+    con <- connect_db(); on.exit(dbDisconnect(con))
+    n <- as.numeric(dbGetQuery(con, "SELECT COUNT(*)::text AS n FROM genes")$n)
+    make_counter_ui(n)
+  })
+  output$n_clu_animated <- renderUI({
+    con <- connect_db(); on.exit(dbDisconnect(con))
+    n <- as.numeric(dbGetQuery(con, "SELECT COUNT(*)::text AS n FROM pan_gene_clusters")$n)
+    make_counter_ui(n)
+  })
+  output$n_go_animated <- renderUI({
+    con <- connect_db(); on.exit(dbDisconnect(con))
+    n <- as.numeric(dbGetQuery(con, "SELECT COUNT(*)::text AS n FROM go_annotations")$n)
+    make_counter_ui(n)
+  })
+  output$n_ko_animated <- renderUI({
+    con <- connect_db(); on.exit(dbDisconnect(con))
+    n <- as.numeric(dbGetQuery(con, "SELECT COUNT(*)::text AS n FROM kegg_ko")$n)
+    make_counter_ui(n)
+  })
+  output$n_path_animated <- renderUI({
+    con <- connect_db(); on.exit(dbDisconnect(con))
+    n <- as.numeric(dbGetQuery(con, "SELECT COUNT(*)::text AS n FROM kegg_pathways")$n)
+    make_counter_ui(n)
+  })
+  output$n_kog_animated <- renderUI({
+    con <- connect_db(); on.exit(dbDisconnect(con))
+    n <- as.numeric(dbGetQuery(con, "SELECT COUNT(*)::text AS n FROM kog_annotations")$n)
+    make_counter_ui(n)
+  })
+  output$n_crispr_animated <- renderUI({
+    con <- connect_db(); on.exit(dbDisconnect(con))
+    n <- as.numeric(dbGetQuery(con, "SELECT COUNT(*)::text AS n FROM crispr_guides")$n)
+    make_counter_ui(n)
+  })
+  output$n_crispr_genes_animated <- renderUI({
+    con <- connect_db(); on.exit(dbDisconnect(con))
+    n <- as.numeric(dbGetQuery(con, "SELECT COUNT(DISTINCT gene_id)::text AS n FROM crispr_guides")$n)
+    make_counter_ui(n)
+  })
+
+  # ---------- Navigation ----------
   observeEvent(input$nav_to, {
     target <- input$nav_to
     if (target == "core_clusters") {
@@ -541,204 +706,145 @@ server <- function(input, output, session) {
       updateTabsetPanel(session, "tabs", selected = "GO Browser")
     } else if (target == "kegg") {
       updateTabsetPanel(session, "tabs", selected = "KEGG Pathways")
+    } else if (target == "crispr") {
+      updateTabsetPanel(session, "tabs", selected = "CRISPR Guides")
     }
   })
 
-  # -------- Home stats --------
-  output$n_acc <- renderText({
+  # ---------- HERO FIGURE ----------
+  output$hero_figure <- renderPlot({
     con <- connect_db(); on.exit(dbDisconnect(con))
-    as.character(dbGetQuery(con, "SELECT COUNT(*)::text AS n FROM accessions")$n)
-  })
-  output$n_spec <- renderText({
-    con <- connect_db(); on.exit(dbDisconnect(con))
-    as.character(dbGetQuery(con, "SELECT COUNT(DISTINCT species)::text AS n FROM accessions")$n)
-  })
-  output$n_genes <- renderText({
-    con <- connect_db(); on.exit(dbDisconnect(con))
-    n <- dbGetQuery(con, "SELECT COUNT(*)::text AS n FROM genes")$n
-    format(as.numeric(n), big.mark = ",")
-  })
-  output$n_clu <- renderText({
-    con <- connect_db(); on.exit(dbDisconnect(con))
-    n <- dbGetQuery(con, "SELECT COUNT(*)::text AS n FROM pan_gene_clusters")$n
-    format(as.numeric(n), big.mark = ",")
-  })
-  output$n_go <- renderText({
-    con <- connect_db(); on.exit(dbDisconnect(con))
-    n <- dbGetQuery(con, "SELECT COUNT(*)::text AS n FROM go_annotations")$n
-    format(as.numeric(n), big.mark = ",")
-  })
-  output$n_ko <- renderText({
-    con <- connect_db(); on.exit(dbDisconnect(con))
-    n <- dbGetQuery(con, "SELECT COUNT(*)::text AS n FROM kegg_ko")$n
-    format(as.numeric(n), big.mark = ",")
-  })
-  output$n_path <- renderText({
-    con <- connect_db(); on.exit(dbDisconnect(con))
-    n <- dbGetQuery(con, "SELECT COUNT(*)::text AS n FROM kegg_pathways")$n
-    format(as.numeric(n), big.mark = ",")
-  })
-  output$n_kog <- renderText({
-    con <- connect_db(); on.exit(dbDisconnect(con))
-    n <- dbGetQuery(con, "SELECT COUNT(*)::text AS n FROM kog_annotations")$n
-    format(as.numeric(n), big.mark = ",")
-  })
+    dfA <- dbGetQuery(con, "SELECT cluster_type, COUNT(*)::text AS n FROM pan_gene_clusters GROUP BY cluster_type ORDER BY COUNT(*) DESC")
+    dfA$n <- as.numeric(dfA$n)
+    dfB <- dbGetQuery(con, "SELECT accession_name, species, gene_count::text AS n FROM accessions ORDER BY gene_count DESC")
+    dfB$n <- as.numeric(dfB$n)
+    dfC <- dbGetQuery(con, "
+      SELECT c.contig_name, a.accession_name, COUNT(*)::text AS n
+      FROM genes g
+      JOIN contigs c ON g.contig_id = c.contig_id
+      JOIN accessions a ON g.accession_id = a.accession_id
+      GROUP BY c.contig_name, a.accession_name")
+    dfC$n <- as.numeric(dfC$n)
+    clu <- dbGetQuery(con, "SELECT cluster_id, cluster_name FROM pan_gene_clusters WHERE cluster_type='core' ORDER BY gene_count DESC LIMIT 20")
+    acc <- dbGetQuery(con, "SELECT accession_id, accession_name FROM accessions ORDER BY species, accession_name")
+    pa  <- dbGetQuery(con, "SELECT cluster_id, accession_id FROM gene_presence_absence WHERE is_present=TRUE")
+    acc_order <- acc$accession_id
+    mat <- matrix(0, nrow=nrow(clu), ncol=length(acc_order))
+    for (i in seq_len(nrow(pa))) {
+      r <- which(clu$cluster_id == pa$cluster_id[i])
+      cc <- which(acc_order == pa$accession_id[i])
+      if (length(r)==1 && length(cc)==1) mat[r,cc] <- 1
+    }
+    par(mfrow = c(2,2), mar = c(4,12,3,2), oma = c(0,0,3,0))
 
-  output$cluster_plot <- renderPlot({
-    con <- connect_db(); on.exit(dbDisconnect(con))
-    df <- dbGetQuery(con, "
-      SELECT cluster_type, COUNT(*)::text AS n FROM pan_gene_clusters
-      GROUP BY cluster_type ORDER BY COUNT(*) DESC")
-    df$n <- as.numeric(df$n)
-    df <- df[!is.na(df$n) & df$n > 0, , drop = FALSE]
-    if (nrow(df) == 0) { plot.new(); text(0.5, 0.5, "No data"); return() }
-    par(mar = c(5, 10, 3, 1))
-    barplot(height = df$n, names.arg = as.character(df$cluster_type),
-            las = 1, horiz = TRUE,
-            col = c("#1a4d38","#f5b342","#d48c1a","#8b5e9b","#2b7a5e"),
-            main = "Pan-Gene Cluster Types", xlab = "Count")
-  })
+    palA <- c("#1a4d38","#f5b342","#d48c1a","#8b5e9b","#2b7a5e")
+    pct <- round(dfA$n/sum(dfA$n)*100, 1)
+    labelsA <- paste0(dfA$cluster_type, " (", format(dfA$n, big.mark=","), ")")
+    pie(dfA$n, labels=labelsA, col=palA[seq_len(nrow(dfA))],
+        main="A. Cluster type distribution", cex=0.7, border="white")
 
-  # -------- Accessions --------
+    species_colors <- c("Medicago sativa"="#1a4d38","Medicago truncatula"="#f5b342",
+                        "Medicago ruthenica"="#d48c1a","Medicago arabica"="#8b5e9b",
+                        "Medicago polymorpha"="#2b7a5e","Medicago lupulina"="#5a9b7e")
+    bc <- species_colors[dfB$species]; bc[is.na(bc)] <- "#8fa7b3"
+    par(mar=c(4,12,3,2))
+    barplot(dfB$n, names.arg=dfB$accession_name, las=1, horiz=TRUE,
+            col=bc, border="white", main="B. Genes per accession",
+            xlab="Gene count", cex.names=0.7)
+
+    if (nrow(dfC) > 0) {
+      tab <- xtabs(n ~ contig_name + accession_name, data=dfC)
+      par(mar=c(4,5,3,2))
+      barplot(t(tab), col=rainbow(ncol(tab)), border=NA,
+              main="C. Genes per chromosome", xlab="Chromosome",
+              ylab="Gene count", las=2, cex.names=0.6)
+    }
+
+    par(mar=c(4,12,3,2))
+    plot(NA, xlim=c(0,ncol(mat)), ylim=c(0,nrow(mat)), xaxt="n", yaxt="n",
+         xlab="", ylab="", main="D. Presence/absence of top 20 core clusters", bty="n")
+    for (i in 1:nrow(mat)) for (j in 1:ncol(mat)) {
+      rect(j-1, i-1, j, i, col=if(mat[i,j]==1) "#1a4d38" else "#e6eae8",
+           border="white", lwd=0.4)
+    }
+    axis(2, at=(1:nrow(mat))-0.5, labels=clu$cluster_name, las=2, cex.axis=0.55, tick=FALSE)
+    axis(1, at=(1:ncol(mat))-0.5, labels=acc$accession_name, las=2, cex.axis=0.6, tick=FALSE)
+
+    mtext("Figure 1 - Alfalfa Multi-Omics Pan-Genome Overview",
+          outer=TRUE, cex=1.15, font=2, col="#0B3B2C", line=0.5)
+  }, height = 820)
+
+  output$dl_hero_figure <- downloadHandler(
+    filename = function() paste0("Figure1_pan_genome_overview_", Sys.Date(), ".png"),
+    content = function(file) {
+      png(file, width = 1800, height = 1600, res = 150)
+      con <- connect_db(); on.exit(dbDisconnect(con), add = TRUE)
+      dfA <- dbGetQuery(con, "SELECT cluster_type, COUNT(*)::text AS n FROM pan_gene_clusters GROUP BY cluster_type ORDER BY COUNT(*) DESC"); dfA$n <- as.numeric(dfA$n)
+      dfB <- dbGetQuery(con, "SELECT accession_name, species, gene_count::text AS n FROM accessions ORDER BY gene_count DESC"); dfB$n <- as.numeric(dfB$n)
+      dfC <- dbGetQuery(con, "SELECT c.contig_name, a.accession_name, COUNT(*)::text AS n FROM genes g JOIN contigs c ON g.contig_id=c.contig_id JOIN accessions a ON g.accession_id=a.accession_id GROUP BY c.contig_name, a.accession_name"); dfC$n <- as.numeric(dfC$n)
+      clu <- dbGetQuery(con, "SELECT cluster_id, cluster_name FROM pan_gene_clusters WHERE cluster_type='core' ORDER BY gene_count DESC LIMIT 20")
+      acc <- dbGetQuery(con, "SELECT accession_id, accession_name FROM accessions ORDER BY species, accession_name")
+      pa  <- dbGetQuery(con, "SELECT cluster_id, accession_id FROM gene_presence_absence WHERE is_present=TRUE")
+      acc_order <- acc$accession_id
+      mat <- matrix(0, nrow=nrow(clu), ncol=length(acc_order))
+      for (i in seq_len(nrow(pa))) {
+        r <- which(clu$cluster_id == pa$cluster_id[i]); cc <- which(acc_order == pa$accession_id[i])
+        if (length(r)==1 && length(cc)==1) mat[r,cc] <- 1
+      }
+      par(mfrow = c(2,2), mar = c(4,12,3,2), oma = c(0,0,3,0))
+      palA <- c("#1a4d38","#f5b342","#d48c1a","#8b5e9b","#2b7a5e")
+      labelsA <- paste0(dfA$cluster_type, " (", format(dfA$n, big.mark=","), ")")
+      pie(dfA$n, labels=labelsA, col=palA[seq_len(nrow(dfA))],
+          main="A. Cluster type distribution", cex=0.7, border="white")
+      species_colors <- c("Medicago sativa"="#1a4d38","Medicago truncatula"="#f5b342",
+                          "Medicago ruthenica"="#d48c1a","Medicago arabica"="#8b5e9b",
+                          "Medicago polymorpha"="#2b7a5e","Medicago lupulina"="#5a9b7e")
+      bc <- species_colors[dfB$species]; bc[is.na(bc)] <- "#8fa7b3"
+      par(mar=c(4,12,3,2))
+      barplot(dfB$n, names.arg=dfB$accession_name, las=1, horiz=TRUE,
+              col=bc, border="white", main="B. Genes per accession", xlab="Gene count", cex.names=0.7)
+      if (nrow(dfC) > 0) {
+        tab <- xtabs(n ~ contig_name + accession_name, data=dfC)
+        par(mar=c(4,5,3,2))
+        barplot(t(tab), col=rainbow(ncol(tab)), border=NA, main="C. Genes per chromosome",
+                xlab="Chromosome", ylab="Gene count", las=2, cex.names=0.6)
+      }
+      par(mar=c(4,12,3,2))
+      plot(NA, xlim=c(0,ncol(mat)), ylim=c(0,nrow(mat)), xaxt="n", yaxt="n", xlab="", ylab="",
+           main="D. Presence/absence of top 20 core clusters", bty="n")
+      for (i in 1:nrow(mat)) for (j in 1:ncol(mat)) {
+        rect(j-1, i-1, j, i, col=if(mat[i,j]==1) "#1a4d38" else "#e6eae8", border="white", lwd=0.4)
+      }
+      axis(2, at=(1:nrow(mat))-0.5, labels=clu$cluster_name, las=2, cex.axis=0.55, tick=FALSE)
+      axis(1, at=(1:ncol(mat))-0.5, labels=acc$accession_name, las=2, cex.axis=0.6, tick=FALSE)
+      mtext("Figure 1 - Alfalfa Multi-Omics Pan-Genome Overview", outer=TRUE, cex=1.3, font=2, col="#0B3B2C", line=0.7)
+      dev.off()
+    }
+  )
+
+  # ---------- Data tables ----------
   output$accessions_table <- renderDT({
     con <- connect_db(); on.exit(dbDisconnect(con))
-    df <- dbGetQuery(con, "
-      SELECT accession_name, species, subspecies, cultivar,
-             genome_size, gc_content, contig_count, gene_count
-      FROM accessions ORDER BY species, accession_name")
+    df <- dbGetQuery(con, "SELECT accession_name, species, subspecies, cultivar, genome_size, gc_content, contig_count, gene_count FROM accessions ORDER BY species, accession_name")
     datatable(df, options = list(pageLength = 15, scrollX = TRUE))
   })
 
-  # -------- Clusters --------
   output$clusters_table <- renderDT({
     con <- connect_db(); on.exit(dbDisconnect(con))
-    q <- "SELECT cluster_id, cluster_name, cluster_type, gene_count, presence_across_accessions
-          FROM pan_gene_clusters"
+    q <- "SELECT cluster_id, cluster_name, cluster_type, gene_count, presence_across_accessions FROM pan_gene_clusters"
     if (!is.null(input$cluster_type_filter) && input$cluster_type_filter != "All") {
       q <- paste0(q, " WHERE cluster_type = '", input$cluster_type_filter, "'")
     }
     q <- paste0(q, " ORDER BY gene_count DESC LIMIT 5000")
-    datatable(dbGetQuery(con, q), selection = "single",
-              options = list(pageLength = 20, scrollX = TRUE))
+    datatable(dbGetQuery(con, q), selection = "single", options = list(pageLength = 20, scrollX = TRUE))
   })
 
-  show_cluster_detail <- function(cluster_id, cluster_name, cluster_type, gene_count, presence) {
-    con <- connect_db(); on.exit(dbDisconnect(con))
-    memb <- tryCatch(dbGetQuery(con, sprintf("
-      SELECT a.accession_name, a.species, gm.gene_name, gm.start_pos, gm.end_pos, gm.strand
-      FROM cluster_membership cm
-      JOIN genes gm ON cm.gene_id = gm.gene_id
-      JOIN accessions a ON cm.accession_id = a.accession_id
-      WHERE cm.cluster_id = %d ORDER BY a.accession_name, gm.start_pos
-    ", cluster_id)), error = function(e) data.frame())
-
-    all_acc <- dbGetQuery(con, "SELECT accession_name, species FROM accessions ORDER BY species, accession_name")
-    badge_cls <- paste0("badge badge-", cluster_type)
-
-    matrix_html <- paste0(
-      "<h4 style='color:#1a4d38; margin-top:20px;'>Presence / Absence Matrix</h4>",
-      "<table style='width:100%; border-collapse:collapse;'>",
-      "<tr style='background:#1a4d38; color:white;'>",
-      "<th style='padding:8px; text-align:left;'>Accession</th>",
-      "<th style='padding:8px; text-align:left;'>Species</th>",
-      "<th style='padding:8px; text-align:center;'>Status</th>",
-      "<th style='padding:8px; text-align:right;'>Copies</th></tr>")
-    for (i in seq_len(nrow(all_acc))) {
-      acc_name <- all_acc$accession_name[i]
-      is_present <- acc_name %in% memb$accession_name
-      copies <- if (is_present) sum(memb$accession_name == acc_name) else 0
-      status_cell <- if (is_present) {
-        "<span style='background:#1a4d38; color:white; padding:3px 12px; border-radius:20px; font-weight:700; font-size:0.8rem;'>\u2713 Present</span>"
-      } else {
-        "<span style='background:#d0d8d4; color:#666; padding:3px 12px; border-radius:20px; font-weight:700; font-size:0.8rem;'>\u2717 Absent</span>"
-      }
-      matrix_html <- paste0(matrix_html,
-        "<tr style='border-bottom:1px solid #eef2f0;'>",
-        "<td style='padding:6px 8px;'><b>", acc_name, "</b></td>",
-        "<td style='padding:6px 8px;'><i>", all_acc$species[i], "</i></td>",
-        "<td style='padding:6px 8px; text-align:center;'>", status_cell, "</td>",
-        "<td style='padding:6px 8px; text-align:right;'>", copies, "</td></tr>")
-    }
-    matrix_html <- paste0(matrix_html, "</table>")
-
-    members_html <- ""
-    if (nrow(memb) > 0) {
-      members_html <- paste0(
-        "<h4 style='color:#1a4d38; margin-top:20px;'>Member Genes (", nrow(memb), ")</h4>",
-        "<table style='width:100%; border-collapse:collapse;'>",
-        "<tr style='background:#1a4d38; color:white;'>",
-        "<th style='padding:8px; text-align:left;'>Accession</th>",
-        "<th style='padding:8px; text-align:left;'>Gene</th>",
-        "<th style='padding:8px; text-align:left;'>Position</th>",
-        "<th style='padding:8px; text-align:left;'>Strand</th></tr>")
-      for (i in seq_len(nrow(memb))) {
-        members_html <- paste0(members_html,
-          "<tr style='border-bottom:1px solid #eef2f0;'>",
-          "<td style='padding:6px 8px;'>", memb$accession_name[i], "</td>",
-          "<td style='padding:6px 8px;'>", memb$gene_name[i], "</td>",
-          "<td style='padding:6px 8px;'>", memb$start_pos[i], " \u2013 ", memb$end_pos[i], "</td>",
-          "<td style='padding:6px 8px;'>", memb$strand[i], "</td></tr>")
-      }
-      members_html <- paste0(members_html, "</table>")
-    }
-
-    showModal(modalDialog(
-      title = paste0("\U0001F9EC Cluster: ", cluster_name),
-      size = "l", easyClose = TRUE, footer = modalButton("Close"),
-      HTML(paste0(
-        "<div style='background:#f7faf5; padding:16px; border-left:6px solid #f5b342; border-radius:8px;'>",
-        "<table style='width:100%;'>",
-        "<tr><td style='width:180px;'><b>Cluster Name:</b></td><td>", cluster_name, "</td></tr>",
-        "<tr><td><b>Cluster Type:</b></td><td><span class='", badge_cls, "'>", cluster_type, "</span></td></tr>",
-        "<tr><td><b>Family Size:</b></td><td>", gene_count, " genes</td></tr>",
-        "<tr><td><b>Present in:</b></td><td>", presence, " / 12 accessions</td></tr>",
-        "</table></div>", matrix_html, members_html
-      ))
-    ))
-  }
-
-  observeEvent(input$clusters_table_rows_selected, {
-    row_idx <- input$clusters_table_rows_selected
-    if (length(row_idx) == 0) return()
-    con <- connect_db(); on.exit(dbDisconnect(con))
-    q <- "SELECT cluster_id, cluster_name, cluster_type, gene_count, presence_across_accessions
-          FROM pan_gene_clusters"
-    if (!is.null(input$cluster_type_filter) && input$cluster_type_filter != "All") {
-      q <- paste0(q, " WHERE cluster_type = '", input$cluster_type_filter, "'")
-    }
-    q <- paste0(q, " ORDER BY gene_count DESC LIMIT 5000")
-    df <- dbGetQuery(con, q)
-    if (row_idx > nrow(df)) return()
-    clu <- df[row_idx, ]
-    show_cluster_detail(clu$cluster_id, clu$cluster_name, clu$cluster_type,
-                        clu$gene_count, clu$presence_across_accessions)
-  })
-
-  # -------- Top families --------
   output$top_families_table <- renderDT({
     con <- connect_db(); on.exit(dbDisconnect(con))
-    df <- dbGetQuery(con, "
-      SELECT cluster_id, cluster_name, cluster_type, gene_count, presence_across_accessions
-      FROM pan_gene_clusters
-      ORDER BY gene_count DESC, presence_across_accessions DESC LIMIT 20")
-    datatable(df, selection = "single",
-              options = list(pageLength = 20, scrollX = TRUE, dom = 't'))
-  })
-  observeEvent(input$top_families_table_rows_selected, {
-    row_idx <- input$top_families_table_rows_selected
-    if (length(row_idx) == 0) return()
-    con <- connect_db(); on.exit(dbDisconnect(con))
-    df <- dbGetQuery(con, "
-      SELECT cluster_id, cluster_name, cluster_type, gene_count, presence_across_accessions
-      FROM pan_gene_clusters
-      ORDER BY gene_count DESC, presence_across_accessions DESC LIMIT 20")
-    if (row_idx > nrow(df)) return()
-    clu <- df[row_idx, ]
-    show_cluster_detail(clu$cluster_id, clu$cluster_name, clu$cluster_type,
-                        clu$gene_count, clu$presence_across_accessions)
+    df <- dbGetQuery(con, "SELECT cluster_id, cluster_name, cluster_type, gene_count, presence_across_accessions FROM pan_gene_clusters ORDER BY gene_count DESC, presence_across_accessions DESC LIMIT 20")
+    datatable(df, selection = "single", options = list(pageLength = 20, scrollX = TRUE, dom = 't'))
   })
 
-  # -------- PA --------
   observe({
     con <- connect_db(); on.exit(dbDisconnect(con))
     acc <- dbGetQuery(con, "SELECT accession_name FROM accessions ORDER BY accession_name")$accession_name
@@ -756,493 +862,217 @@ server <- function(input, output, session) {
     datatable(df, options = list(pageLength = 20, scrollX = TRUE))
   })
 
-  # -------- Search --------
   output$search_table <- renderDT({
     req(input$gene_query)
     con <- connect_db(); on.exit(dbDisconnect(con))
-    q <- sprintf("
-      SELECT g.gene_id, g.gene_name, a.accession_name, a.species,
-             c.contig_name, g.start_pos, g.end_pos, g.strand
-      FROM genes g
-      JOIN accessions a ON g.accession_id = a.accession_id
-      JOIN contigs c ON g.contig_id = c.contig_id
-      WHERE g.gene_name ILIKE '%%%s%%' LIMIT 500", input$gene_query)
-    datatable(dbGetQuery(con, q), selection = "single",
-              options = list(pageLength = 20, scrollX = TRUE))
+    q <- sprintf("SELECT g.gene_name, a.accession_name, a.species, c.contig_name, g.start_pos, g.end_pos, g.strand FROM genes g JOIN accessions a ON g.accession_id = a.accession_id JOIN contigs c ON g.contig_id = c.contig_id WHERE g.gene_name ILIKE '%%%s%%' LIMIT 500", input$gene_query)
+    datatable(dbGetQuery(con, q), options = list(pageLength = 20, scrollX = TRUE))
   })
 
-  observeEvent(input$search_table_rows_selected, {
-    req(input$gene_query)
-    row_idx <- input$search_table_rows_selected
-    if (length(row_idx) == 0) return()
-    con <- connect_db(); on.exit(dbDisconnect(con))
-    q <- sprintf("
-      SELECT g.gene_id, g.gene_name, a.accession_name, a.species,
-             c.contig_name, g.start_pos, g.end_pos, g.strand
-      FROM genes g
-      JOIN accessions a ON g.accession_id = a.accession_id
-      JOIN contigs c ON g.contig_id = c.contig_id
-      WHERE g.gene_name ILIKE '%%%s%%' LIMIT 500", input$gene_query)
-    df <- dbGetQuery(con, q)
-    if (row_idx > nrow(df)) return()
-    g <- df[row_idx, ]
-
-    clu <- tryCatch(dbGetQuery(con, sprintf("
-      SELECT pc.cluster_id, pc.cluster_name, pc.cluster_type, pc.gene_count,
-             pc.presence_across_accessions
-      FROM cluster_membership cm
-      JOIN pan_gene_clusters pc ON cm.cluster_id = pc.cluster_id
-      WHERE cm.gene_id = %d LIMIT 1", g$gene_id)), error = function(e) data.frame())
-
-    members_html <- "<p style='color:#666;'>This gene is not assigned to any pan-gene cluster.</p>"
-    if (nrow(clu) > 0) {
-      memb <- tryCatch(dbGetQuery(con, sprintf("
-        SELECT a.accession_name, a.species, gm.gene_name, gm.start_pos, gm.end_pos, gm.strand
-        FROM cluster_membership cm
-        JOIN genes gm ON cm.gene_id = gm.gene_id
-        JOIN accessions a ON cm.accession_id = a.accession_id
-        WHERE cm.cluster_id = %d ORDER BY a.accession_name", clu$cluster_id[1])),
-        error = function(e) data.frame())
-      badge_cls <- paste0("badge badge-", clu$cluster_type[1])
-      members_html <- paste0(
-        "<h4 style='color:#1a4d38; margin-top:20px;'>Cluster: ",
-        clu$cluster_name[1], " <span class='", badge_cls, "'>", clu$cluster_type[1], "</span></h4>",
-        "<p><b>Family size:</b> ", clu$gene_count[1], " genes \u00b7 ",
-        "<b>Present in:</b> ", clu$presence_across_accessions[1], " / 12</p>",
-        "<table style='width:100%; border-collapse:collapse; margin-top:12px;'>",
-        "<tr style='background:#1a4d38; color:white;'>",
-        "<th style='padding:8px; text-align:left;'>Accession</th>",
-        "<th style='padding:8px; text-align:left;'>Species</th>",
-        "<th style='padding:8px; text-align:left;'>Gene</th>",
-        "<th style='padding:8px; text-align:left;'>Position</th>",
-        "<th style='padding:8px; text-align:left;'>Strand</th></tr>")
-      if (nrow(memb) > 0) {
-        for (i in seq_len(nrow(memb))) {
-          members_html <- paste0(members_html,
-            "<tr style='border-bottom:1px solid #eef2f0;'>",
-            "<td style='padding:6px 8px;'>", memb$accession_name[i], "</td>",
-            "<td style='padding:6px 8px;'><i>", memb$species[i], "</i></td>",
-            "<td style='padding:6px 8px;'>", memb$gene_name[i], "</td>",
-            "<td style='padding:6px 8px;'>", memb$start_pos[i], " \u2013 ", memb$end_pos[i], "</td>",
-            "<td style='padding:6px 8px;'>", memb$strand[i], "</td></tr>")
-        }
-      }
-      members_html <- paste0(members_html, "</table>")
-    }
-
-    showModal(modalDialog(
-      title = paste0("\U0001F9EC Gene: ", g$gene_name),
-      size = "l", easyClose = TRUE, footer = modalButton("Close"),
-      HTML(paste0(
-        "<div style='background:#f7faf5; padding:16px; border-left:6px solid #f5b342; border-radius:8px;'>",
-        "<table style='width:100%;'>",
-        "<tr><td style='width:130px;'><b>Gene:</b></td><td>", g$gene_name, "</td></tr>",
-        "<tr><td><b>Accession:</b></td><td>", g$accession_name, "</td></tr>",
-        "<tr><td><b>Species:</b></td><td><i>", g$species, "</i></td></tr>",
-        "<tr><td><b>Contig:</b></td><td>", g$contig_name, "</td></tr>",
-        "<tr><td><b>Position:</b></td><td>", g$start_pos, " \u2013 ", g$end_pos, "</td></tr>",
-        "<tr><td><b>Strand:</b></td><td>", g$strand, "</td></tr>",
-        "</table></div>", members_html
-      ))
-    ))
-  })
-
-  # ============================================================
-  # GO BROWSER
-  # ============================================================
+  # ---------- GO Browser ----------
   observe({
     con <- connect_db(); on.exit(dbDisconnect(con))
     acc <- dbGetQuery(con, "SELECT accession_name FROM accessions ORDER BY accession_name")$accession_name
     updateSelectInput(session, "go_accession", choices = c("All", acc))
   })
-
   output$go_table <- renderDT({
     req(input$go_query)
     con <- connect_db(); on.exit(dbDisconnect(con))
-    acc_filter <- ""
-    if (!is.null(input$go_accession) && input$go_accession != "All") {
-      acc_filter <- sprintf(" AND a.accession_name = '%s'", input$go_accession)
-    }
-    q <- sprintf("
-      SELECT g.gene_name, a.accession_name, a.species, go.go_term
-      FROM go_annotations go
-      JOIN genes g ON go.gene_id = g.gene_id
-      JOIN accessions a ON go.accession_id = a.accession_id
-      WHERE (go.go_term ILIKE '%%%s%%' OR g.gene_name ILIKE '%%%s%%')
-      %s
-      LIMIT 1000
-    ", input$go_query, input$go_query, acc_filter)
+    acc_filter <- if (!is.null(input$go_accession) && input$go_accession != "All") sprintf(" AND a.accession_name = '%s'", input$go_accession) else ""
+    q <- sprintf("SELECT g.gene_name, a.accession_name, a.species, go.go_term FROM go_annotations go JOIN genes g ON go.gene_id = g.gene_id JOIN accessions a ON go.accession_id = a.accession_id WHERE (go.go_term ILIKE '%%%s%%' OR g.gene_name ILIKE '%%%s%%') %s LIMIT 1000", input$go_query, input$go_query, acc_filter)
     datatable(dbGetQuery(con, q), options = list(pageLength = 20, scrollX = TRUE))
   })
-
   output$go_distribution <- renderPlot({
     req(input$go_query)
     con <- connect_db(); on.exit(dbDisconnect(con))
-    acc_filter <- ""
-    if (!is.null(input$go_accession) && input$go_accession != "All") {
-      acc_filter <- sprintf(" AND a.accession_name = '%s'", input$go_accession)
-    }
-    q <- sprintf("
-      SELECT a.accession_name, COUNT(*)::text AS n
-      FROM go_annotations go
-      JOIN genes g ON go.gene_id = g.gene_id
-      JOIN accessions a ON go.accession_id = a.accession_id
-      WHERE (go.go_term ILIKE '%%%s%%' OR g.gene_name ILIKE '%%%s%%')
-      %s
-      GROUP BY a.accession_name ORDER BY COUNT(*) DESC
-    ", input$go_query, input$go_query, acc_filter)
+    acc_filter <- if (!is.null(input$go_accession) && input$go_accession != "All") sprintf(" AND a.accession_name = '%s'", input$go_accession) else ""
+    q <- sprintf("SELECT a.accession_name, COUNT(*)::text AS n FROM go_annotations go JOIN genes g ON go.gene_id = g.gene_id JOIN accessions a ON go.accession_id = a.accession_id WHERE (go.go_term ILIKE '%%%s%%' OR g.gene_name ILIKE '%%%s%%') %s GROUP BY a.accession_name ORDER BY COUNT(*) DESC", input$go_query, input$go_query, acc_filter)
     df <- dbGetQuery(con, q)
     if (nrow(df) == 0) { plot.new(); text(0.5, 0.5, "No results"); return() }
     df$n <- as.numeric(df$n)
     par(mar = c(5, 14, 3, 1))
-    barplot(df$n, names.arg = df$accession_name, las = 1, horiz = TRUE,
-            col = "#2b7a5e", main = "GO term hits per accession", xlab = "Count",
-            cex.names = 0.8)
+    barplot(df$n, names.arg = df$accession_name, las = 1, horiz = TRUE, col = "#2b7a5e", main = "GO term hits per accession", xlab = "Count", cex.names = 0.8)
   })
 
-  # ============================================================
-  # KEGG BROWSER
-  # ============================================================
+  # ---------- KEGG ----------
   observe({
     con <- connect_db(); on.exit(dbDisconnect(con))
     acc <- dbGetQuery(con, "SELECT accession_name FROM accessions ORDER BY accession_name")$accession_name
     updateSelectInput(session, "kegg_accession", choices = c("All", acc))
   })
-
   output$kegg_table <- renderDT({
     req(input$kegg_query)
     con <- connect_db(); on.exit(dbDisconnect(con))
-    acc_filter <- ""
-    if (!is.null(input$kegg_accession) && input$kegg_accession != "All") {
-      acc_filter <- sprintf(" AND a.accession_name = '%s'", input$kegg_accession)
-    }
-    q <- sprintf("
-      SELECT g.gene_name, a.accession_name, a.species,
-             kk.ko_number, kp.pathway_code
-      FROM kegg_ko kk
-      JOIN genes g ON kk.gene_id = g.gene_id
-      JOIN accessions a ON kk.accession_id = a.accession_id
-      LEFT JOIN kegg_pathways kp ON kp.gene_id = kk.gene_id AND kp.accession_id = kk.accession_id
-      WHERE (kk.ko_number ILIKE '%%%s%%' OR g.gene_name ILIKE '%%%s%%')
-      %s
-      LIMIT 1000
-    ", input$kegg_query, input$kegg_query, acc_filter)
+    acc_filter <- if (!is.null(input$kegg_accession) && input$kegg_accession != "All") sprintf(" AND a.accession_name = '%s'", input$kegg_accession) else ""
+    q <- sprintf("SELECT g.gene_name, a.accession_name, kk.ko_number, kp.pathway_code FROM kegg_ko kk JOIN genes g ON kk.gene_id = g.gene_id JOIN accessions a ON kk.accession_id = a.accession_id LEFT JOIN kegg_pathways kp ON kp.gene_id = kk.gene_id AND kp.accession_id = kk.accession_id WHERE (kk.ko_number ILIKE '%%%s%%' OR g.gene_name ILIKE '%%%s%%') %s LIMIT 1000", input$kegg_query, input$kegg_query, acc_filter)
     datatable(dbGetQuery(con, q), options = list(pageLength = 20, scrollX = TRUE))
   })
-
   output$ko_distribution <- renderPlot({
     con <- connect_db(); on.exit(dbDisconnect(con))
-    df <- dbGetQuery(con, "
-      SELECT ko_number, COUNT(*)::text AS n
-      FROM kegg_ko
-      GROUP BY ko_number
-      ORDER BY COUNT(*) DESC
-      LIMIT 20
-    ")
+    df <- dbGetQuery(con, "SELECT ko_number, COUNT(*)::text AS n FROM kegg_ko GROUP BY ko_number ORDER BY COUNT(*) DESC LIMIT 20")
     if (nrow(df) == 0) { plot.new(); text(0.5, 0.5, "No data"); return() }
-    df$n <- as.numeric(df$n)
-    par(mar = c(5, 8, 3, 1))
-    barplot(df$n, names.arg = df$ko_number, las = 2, cex.names = 0.7,
-            col = "#1a4d38", main = "Top 20 KEGG KO numbers", ylab = "Count")
+    df$n <- as.numeric(df$n); par(mar = c(5, 8, 3, 1))
+    barplot(df$n, names.arg = df$ko_number, las = 2, cex.names = 0.7, col = "#1a4d38", main = "Top 20 KEGG KO numbers", ylab = "Count")
   })
-
   output$path_distribution <- renderPlot({
     con <- connect_db(); on.exit(dbDisconnect(con))
-    df <- dbGetQuery(con, "
-      SELECT pathway_code, COUNT(*)::text AS n
-      FROM kegg_pathways
-      GROUP BY pathway_code
-      ORDER BY COUNT(*) DESC
-      LIMIT 20
-    ")
+    df <- dbGetQuery(con, "SELECT pathway_code, COUNT(*)::text AS n FROM kegg_pathways GROUP BY pathway_code ORDER BY COUNT(*) DESC LIMIT 20")
     if (nrow(df) == 0) { plot.new(); text(0.5, 0.5, "No data"); return() }
-    df$n <- as.numeric(df$n)
-    par(mar = c(5, 8, 3, 1))
-    barplot(df$n, names.arg = df$pathway_code, las = 2, cex.names = 0.7,
-            col = "#f5b342", main = "Top 20 KEGG pathways", ylab = "Count")
+    df$n <- as.numeric(df$n); par(mar = c(5, 8, 3, 1))
+    barplot(df$n, names.arg = df$pathway_code, las = 2, cex.names = 0.7, col = "#f5b342", main = "Top 20 KEGG pathways", ylab = "Count")
   })
 
-  # ============================================================
-  # KOG CLASSES
-  # ============================================================
+  # ---------- KOG ----------
   observe({
     con <- connect_db(); on.exit(dbDisconnect(con))
     acc <- dbGetQuery(con, "SELECT accession_name FROM accessions ORDER BY accession_name")$accession_name
     updateSelectInput(session, "kog_accession", choices = c("All", acc))
   })
-
   output$kog_total <- renderText({
     con <- connect_db(); on.exit(dbDisconnect(con))
-    acc_filter <- ""
-    if (!is.null(input$kog_accession) && input$kog_accession != "All") {
-      acc_filter <- sprintf(" WHERE a.accession_name = '%s'", input$kog_accession)
-    }
-    q <- paste0("SELECT COUNT(*)::text AS n FROM kog_annotations ko
-                 JOIN accessions a ON ko.accession_id = a.accession_id", acc_filter)
-    n <- dbGetQuery(con, q)$n
-    format(as.numeric(n), big.mark = ",")
+    acc_filter <- if (!is.null(input$kog_accession) && input$kog_accession != "All") sprintf(" WHERE a.accession_name = '%s'", input$kog_accession) else ""
+    q <- paste0("SELECT COUNT(*)::text AS n FROM kog_annotations ko JOIN accessions a ON ko.accession_id = a.accession_id", acc_filter)
+    n <- dbGetQuery(con, q)$n; format(as.numeric(n), big.mark = ",")
   })
-
   output$kog_chart <- renderPlot({
     con <- connect_db(); on.exit(dbDisconnect(con))
-    acc_filter <- ""
-    if (!is.null(input$kog_accession) && input$kog_accession != "All") {
-      acc_filter <- sprintf(" WHERE a.accession_name = '%s'", input$kog_accession)
-    }
-    q <- paste0("
-      SELECT ko.cog_letter, COUNT(*)::text AS n
-      FROM kog_annotations ko
-      JOIN accessions a ON ko.accession_id = a.accession_id
-      ", acc_filter, "
-      GROUP BY ko.cog_letter ORDER BY ko.cog_letter
-    ")
+    acc_filter <- if (!is.null(input$kog_accession) && input$kog_accession != "All") sprintf(" WHERE a.accession_name = '%s'", input$kog_accession) else ""
+    q <- paste0("SELECT ko.cog_letter, COUNT(*)::text AS n FROM kog_annotations ko JOIN accessions a ON ko.accession_id = a.accession_id ", acc_filter, " GROUP BY ko.cog_letter ORDER BY ko.cog_letter")
     df <- dbGetQuery(con, q)
     if (nrow(df) == 0) { plot.new(); text(0.5, 0.5, "No data"); return() }
-    df$n <- as.numeric(df$n)
-    par(mar = c(5, 5, 3, 1))
-    barplot(df$n, names.arg = df$cog_letter, las = 1,
-            col = "#8b5e9b", main = "KOG Category Distribution",
-            xlab = "COG letter", ylab = "Gene count")
+    df$n <- as.numeric(df$n); par(mar = c(5, 5, 3, 1))
+    barplot(df$n, names.arg = df$cog_letter, las = 1, col = "#8b5e9b", main = "KOG Category Distribution", xlab = "COG letter", ylab = "Gene count")
   })
-
   output$kog_table <- renderDT({
     con <- connect_db(); on.exit(dbDisconnect(con))
-    acc_filter <- ""
-    if (!is.null(input$kog_accession) && input$kog_accession != "All") {
-      acc_filter <- sprintf(" WHERE a.accession_name = '%s'", input$kog_accession)
-    }
-    q <- paste0("
-      SELECT g.gene_name, a.accession_name, a.species, ko.cog_letter
-      FROM kog_annotations ko
-      JOIN genes g ON ko.gene_id = g.gene_id
-      JOIN accessions a ON ko.accession_id = a.accession_id
-      ", acc_filter, "
-      LIMIT 2000
-    ")
+    acc_filter <- if (!is.null(input$kog_accession) && input$kog_accession != "All") sprintf(" WHERE a.accession_name = '%s'", input$kog_accession) else ""
+    q <- paste0("SELECT g.gene_name, a.accession_name, ko.cog_letter FROM kog_annotations ko JOIN genes g ON ko.gene_id = g.gene_id JOIN accessions a ON ko.accession_id = a.accession_id ", acc_filter, " LIMIT 2000")
     datatable(dbGetQuery(con, q), options = list(pageLength = 20, scrollX = TRUE))
   })
 
-  # ============================================================
-  # UNIFIED ANNOTATION SEARCH
-  # ============================================================
+  # ---------- Unified search ----------
   output$unified_gene <- renderDT({
     req(input$unified_query)
     con <- connect_db(); on.exit(dbDisconnect(con))
-    q <- sprintf("
-      SELECT g.gene_name, a.accession_name, a.species, c.contig_name,
-             g.start_pos, g.end_pos, g.strand
-      FROM genes g
-      JOIN accessions a ON g.accession_id = a.accession_id
-      JOIN contigs c ON g.contig_id = c.contig_id
-      WHERE g.gene_name ILIKE '%%%s%%'
-      LIMIT 50
-    ", input$unified_query)
+    q <- sprintf("SELECT g.gene_name, a.accession_name, a.species, c.contig_name, g.start_pos, g.end_pos, g.strand FROM genes g JOIN accessions a ON g.accession_id = a.accession_id JOIN contigs c ON g.contig_id = c.contig_id WHERE g.gene_name ILIKE '%%%s%%' LIMIT 50", input$unified_query)
     datatable(dbGetQuery(con, q), options = list(pageLength = 10, scrollX = TRUE))
   })
-
   output$unified_go <- renderDT({
     req(input$unified_query)
     con <- connect_db(); on.exit(dbDisconnect(con))
-    q <- sprintf("
-      SELECT g.gene_name, a.accession_name, go.go_term
-      FROM go_annotations go
-      JOIN genes g ON go.gene_id = g.gene_id
-      JOIN accessions a ON go.accession_id = a.accession_id
-      WHERE g.gene_name ILIKE '%%%s%%'
-      LIMIT 200
-    ", input$unified_query)
+    q <- sprintf("SELECT g.gene_name, a.accession_name, go.go_term FROM go_annotations go JOIN genes g ON go.gene_id = g.gene_id JOIN accessions a ON go.accession_id = a.accession_id WHERE g.gene_name ILIKE '%%%s%%' LIMIT 200", input$unified_query)
     datatable(dbGetQuery(con, q), options = list(pageLength = 10, scrollX = TRUE))
   })
-
   output$unified_kegg <- renderDT({
     req(input$unified_query)
     con <- connect_db(); on.exit(dbDisconnect(con))
-    q <- sprintf("
-      SELECT g.gene_name, a.accession_name, kk.ko_number, kp.pathway_code
-      FROM kegg_ko kk
-      JOIN genes g ON kk.gene_id = g.gene_id
-      JOIN accessions a ON kk.accession_id = a.accession_id
-      LEFT JOIN kegg_pathways kp ON kp.gene_id = kk.gene_id
-      WHERE g.gene_name ILIKE '%%%s%%'
-      LIMIT 200
-    ", input$unified_query)
+    q <- sprintf("SELECT g.gene_name, a.accession_name, kk.ko_number, kp.pathway_code FROM kegg_ko kk JOIN genes g ON kk.gene_id = g.gene_id JOIN accessions a ON kk.accession_id = a.accession_id LEFT JOIN kegg_pathways kp ON kp.gene_id = kk.gene_id WHERE g.gene_name ILIKE '%%%s%%' LIMIT 200", input$unified_query)
     datatable(dbGetQuery(con, q), options = list(pageLength = 10, scrollX = TRUE))
   })
-
   output$unified_kog <- renderDT({
     req(input$unified_query)
     con <- connect_db(); on.exit(dbDisconnect(con))
-    q <- sprintf("
-      SELECT g.gene_name, a.accession_name, ko.cog_letter
-      FROM kog_annotations ko
-      JOIN genes g ON ko.gene_id = g.gene_id
-      JOIN accessions a ON ko.accession_id = a.accession_id
-      WHERE g.gene_name ILIKE '%%%s%%'
-      LIMIT 200
-    ", input$unified_query)
+    q <- sprintf("SELECT g.gene_name, a.accession_name, ko.cog_letter FROM kog_annotations ko JOIN genes g ON ko.gene_id = g.gene_id JOIN accessions a ON ko.accession_id = a.accession_id WHERE g.gene_name ILIKE '%%%s%%' LIMIT 200", input$unified_query)
     datatable(dbGetQuery(con, q), options = list(pageLength = 10, scrollX = TRUE))
   })
 
-
-  # ============================================================
-  # CRISPR GUIDES
-  # ============================================================
+  # ---------- CRISPR ----------
   observe({
     con <- connect_db(); on.exit(dbDisconnect(con))
     acc <- dbGetQuery(con, "SELECT accession_name FROM accessions ORDER BY accession_name")$accession_name
     updateSelectInput(session, "crispr_accession", choices = c("All", acc))
   })
-
   output$crispr_table <- renderDT({
     req(input$crispr_query)
     con <- connect_db(); on.exit(dbDisconnect(con))
-
-    acc_filter <- ""
-    if (!is.null(input$crispr_accession) && input$crispr_accession != "All") {
-      acc_filter <- sprintf(" AND a.accession_name = '%s'", input$crispr_accession)
-    }
-
-    uniq_filter <- ""
-    if (!is.null(input$crispr_uniqueness) && input$crispr_uniqueness != "All") {
-      uniq_filter <- sprintf(" AND cg.uniqueness = '%s'", input$crispr_uniqueness)
-    }
-
-    q <- sprintf("
-      SELECT cg.gene_name, a.accession_name, a.species,
-             cg.rank_in_gene, cg.spacer_seq, cg.pam_seq,
-             cg.chrom, cg.spacer_start, cg.cut_site,
-             cg.gc_pct, cg.uniqueness, cg.specificity_class
-      FROM crispr_guides cg
-      JOIN accessions a ON cg.accession_id = a.accession_id
-      WHERE (cg.gene_name ILIKE '%%%s%%' OR cg.spacer_seq ILIKE '%%%s%%')
-      %s %s
-      ORDER BY cg.gene_name, cg.rank_in_gene
-      LIMIT 1000
-    ", input$crispr_query, input$crispr_query, acc_filter, uniq_filter)
-
+    acc_filter <- if (!is.null(input$crispr_accession) && input$crispr_accession != "All") sprintf(" AND a.accession_name = '%s'", input$crispr_accession) else ""
+    uniq_filter <- if (!is.null(input$crispr_uniqueness) && input$crispr_uniqueness != "All") sprintf(" AND cg.uniqueness = '%s'", input$crispr_uniqueness) else ""
+    q <- sprintf("SELECT cg.gene_name, a.accession_name, a.species, cg.rank_in_gene, cg.spacer_seq, cg.pam_seq, cg.chrom, cg.spacer_start, cg.cut_site, cg.gc_pct, cg.uniqueness, cg.specificity_class FROM crispr_guides cg JOIN accessions a ON cg.accession_id = a.accession_id WHERE (cg.gene_name ILIKE '%%%s%%' OR cg.spacer_seq ILIKE '%%%s%%') %s %s ORDER BY cg.gene_name, cg.rank_in_gene LIMIT 1000", input$crispr_query, input$crispr_query, acc_filter, uniq_filter)
     datatable(dbGetQuery(con, q), options = list(pageLength = 20, scrollX = TRUE))
   })
 
-
-  # ============================================================
-  # AI ASSISTANT
-  # ============================================================
+  # ---------- AI Assistant ----------
   ai_history <- reactiveVal(list())
-
   observeEvent(input$ai_ask, {
     req(input$ai_question)
     q <- trimws(input$ai_question)
     if (nchar(q) == 0) return()
-
     h <- ai_history()
     h <- c(h, list(list(role = "user", text = q)))
     ai_history(h)
-
     out <- ask_groq_for_sql(q)
     if (!out$ok) {
       h <- c(h, list(list(role = "bot", error = out$error)))
-      ai_history(h)
-      return()
+      ai_history(h); return()
     }
-
     sql <- out$sql
     con <- connect_db(); on.exit(dbDisconnect(con), add = TRUE)
-    result <- tryCatch(dbGetQuery(con, sql),
-                       error = function(e) paste("SQL error:", e$message))
-
+    result <- tryCatch(dbGetQuery(con, sql), error = function(e) paste("SQL error:", e$message))
     h <- c(h, list(list(role = "bot", sql = sql, result = result)))
     ai_history(h)
     updateTextAreaInput(session, "ai_question", value = "")
   })
-
   observeEvent(input$ai_clear, { ai_history(list()) })
-
   output$ai_conversation <- renderUI({
     h <- ai_history()
     if (length(h) == 0) {
-      return(div(style = "color:#7a9587; font-style:italic; padding:20px; text-align:center;",
-                 "No questions yet. Try one above!"))
+      return(div(style = "color:#7a9587; font-style:italic; padding:20px; text-align:center;", "No questions yet. Try one above!"))
     }
     blocks <- lapply(seq_along(h), function(i) {
       m <- h[[i]]
       if (m$role == "user") {
         div(class = "ai-msg-user", shiny::icon("user"), " ", m$text)
       } else if (!is.null(m$error)) {
-        div(class = "ai-msg-bot", shiny::icon("robot"), " ",
-            div(style = "color:#8b1a1a;", strong("Error: "), m$error))
+        div(class = "ai-msg-bot", shiny::icon("robot"), " ", div(style = "color:#8b1a1a;", strong("Error: "), m$error))
       } else {
         tbl_html <- ""
         if (is.data.frame(m$result) && nrow(m$result) > 0) {
-          tbl_html <- datatable(m$result,
-                                options = list(pageLength = 10, scrollX = TRUE),
-                                rownames = FALSE)
+          tbl_html <- datatable(m$result, options = list(pageLength = 10, scrollX = TRUE), rownames = FALSE)
         } else if (is.character(m$result)) {
           tbl_html <- div(style = "color:#8b1a1a;", m$result)
         } else {
           tbl_html <- div(style = "color:#7a9587; font-style:italic;", "No rows returned.")
         }
-        div(class = "ai-msg-bot",
-          shiny::icon("robot"), " ",
+        div(class = "ai-msg-bot", shiny::icon("robot"), " ",
           div(style = "font-size:0.85rem; color:#5a6b62; margin-top:4px;",
-              strong("Generated SQL:"),
-              div(class = "ai-sql", m$sql)),
-          div(style = "margin-top:8px;", tbl_html)
-        )
+              strong("Generated SQL:"), div(class = "ai-sql", m$sql)),
+          div(style = "margin-top:8px;", tbl_html))
       }
     })
     do.call(tagList, blocks)
   })
 
-  # ============================================================
-  # STATISTICS
-  # ============================================================
+  # ---------- Statistics ----------
   output$stat_genes_per_acc <- renderPlot({
     con <- connect_db(); on.exit(dbDisconnect(con))
     df <- dbGetQuery(con, "SELECT accession_name, gene_count::text AS gc FROM accessions ORDER BY gene_count DESC")
-    df$gc <- as.numeric(df$gc)
-    par(mar = c(5, 14, 3, 1))
-    barplot(df$gc, names.arg = df$accession_name, las = 1, horiz = TRUE,
-            col = "#1a4d38", main = "Genes per Accession", xlab = "Gene count", cex.names = 0.8)
+    df$gc <- as.numeric(df$gc); par(mar = c(5, 14, 3, 1))
+    barplot(df$gc, names.arg = df$accession_name, las = 1, horiz = TRUE, col = "#1a4d38", main = "Genes per Accession", xlab = "Gene count", cex.names = 0.8)
   })
   output$stat_gc <- renderPlot({
     con <- connect_db(); on.exit(dbDisconnect(con))
     df <- dbGetQuery(con, "SELECT accession_name, gc_content::text AS gc FROM accessions ORDER BY gc_content DESC")
-    df$gc <- as.numeric(df$gc)
-    par(mar = c(5, 14, 3, 1))
-    barplot(df$gc, names.arg = df$accession_name, las = 1, horiz = TRUE,
-            col = "#f5b342", main = "GC Content per Accession (%)", xlab = "GC %", cex.names = 0.8)
+    df$gc <- as.numeric(df$gc); par(mar = c(5, 14, 3, 1))
+    barplot(df$gc, names.arg = df$accession_name, las = 1, horiz = TRUE, col = "#f5b342", main = "GC Content per Accession (%)", xlab = "GC %", cex.names = 0.8)
   })
   output$stat_genes_per_chrom <- renderPlot({
     con <- connect_db(); on.exit(dbDisconnect(con))
-    df <- dbGetQuery(con, "
-      SELECT c.contig_name, a.accession_name, COUNT(*)::text AS n
-      FROM genes g
-      JOIN contigs c ON g.contig_id = c.contig_id
-      JOIN accessions a ON g.accession_id = a.accession_id
-      GROUP BY c.contig_name, a.accession_name")
+    df <- dbGetQuery(con, "SELECT c.contig_name, a.accession_name, COUNT(*)::text AS n FROM genes g JOIN contigs c ON g.contig_id = c.contig_id JOIN accessions a ON g.accession_id = a.accession_id GROUP BY c.contig_name, a.accession_name")
     df$n <- as.numeric(df$n)
     if (nrow(df) == 0) { plot.new(); text(0.5, 0.5, "No data"); return() }
-    tab <- xtabs(n ~ contig_name + accession_name, data = df)
-    pal <- rainbow(ncol(tab))
+    tab <- xtabs(n ~ contig_name + accession_name, data = df); pal <- rainbow(ncol(tab))
     par(mar = c(5, 5, 3, 12), xpd = TRUE)
-    barplot(t(tab), col = pal, border = NA,
-            main = "Genes per Chromosome", xlab = "Chromosome", ylab = "Gene count",
-            las = 2, cex.names = 0.7)
-    legend("topright", inset = c(-0.18, 0), legend = colnames(tab),
-           fill = pal, bty = "n", cex = 0.65, xpd = TRUE)
+    barplot(t(tab), col = pal, border = NA, main = "Genes per Chromosome", xlab = "Chromosome", ylab = "Gene count", las = 2, cex.names = 0.7)
+    legend("topright", inset = c(-0.18, 0), legend = colnames(tab), fill = pal, bty = "n", cex = 0.65, xpd = TRUE)
   })
   output$stat_cluster_types <- renderPlot({
     con <- connect_db(); on.exit(dbDisconnect(con))
-    df <- dbGetQuery(con, "
-      SELECT cluster_type, COUNT(*)::text AS n FROM pan_gene_clusters
-      GROUP BY cluster_type ORDER BY COUNT(*) DESC")
+    df <- dbGetQuery(con, "SELECT cluster_type, COUNT(*)::text AS n FROM pan_gene_clusters GROUP BY cluster_type ORDER BY COUNT(*) DESC")
     df$n <- as.numeric(df$n)
     if (nrow(df) == 0) { plot.new(); text(0.5, 0.5, "No data"); return() }
     pal <- c("#8b5e9b","#d48c1a","#8fa7b3","#1a4d38","#f5b342")
     par(mar = c(5, 14, 3, 1))
-    barplot(df$n, names.arg = df$cluster_type, las = 1, horiz = TRUE,
-            col = pal[seq_len(nrow(df))],
-            main = "Cluster Type Distribution", xlab = "Count", cex.names = 0.85)
+    barplot(df$n, names.arg = df$cluster_type, las = 1, horiz = TRUE, col = pal[seq_len(nrow(df))], main = "Cluster Type Distribution", xlab = "Count", cex.names = 0.85)
   })
   output$stat_contig_len <- renderPlot({
     con <- connect_db(); on.exit(dbDisconnect(con))
@@ -1250,20 +1080,15 @@ server <- function(input, output, session) {
     df$len <- as.numeric(df$len) / 1e6
     if (nrow(df) == 0) { plot.new(); text(0.5, 0.5, "No data"); return() }
     par(mar = c(5, 5, 3, 1))
-    hist(df$len, breaks = 30, col = "#2b7a5e", border = "white",
-         main = "Contig Length Distribution", xlab = "Length (Mb)", ylab = "Number of contigs")
+    hist(df$len, breaks = 30, col = "#2b7a5e", border = "white", main = "Contig Length Distribution", xlab = "Length (Mb)", ylab = "Number of contigs")
   })
 
-  # ============================================================
-  # ASSEMBLY QUALITY
-  # ============================================================
+  # ---------- Assembly Quality ----------
   output$qc_genome_size <- renderPlot({
     con <- connect_db(); on.exit(dbDisconnect(con))
     df <- dbGetQuery(con, "SELECT accession_name, genome_size::text AS v FROM accessions ORDER BY genome_size DESC")
-    df$v <- as.numeric(df$v) / 1e6
-    par(mar = c(5, 14, 3, 1))
-    barplot(df$v, names.arg = df$accession_name, las = 1, horiz = TRUE,
-            col = "#2b7a5e", main = "Genome Size (Mb)", xlab = "Mb", cex.names = 0.75)
+    df$v <- as.numeric(df$v) / 1e6; par(mar = c(5, 14, 3, 1))
+    barplot(df$v, names.arg = df$accession_name, las = 1, horiz = TRUE, col = "#2b7a5e", main = "Genome Size (Mb)", xlab = "Mb", cex.names = 0.75)
   })
   output$qc_n50 <- renderPlot({
     con <- connect_db(); on.exit(dbDisconnect(con))
@@ -1271,35 +1096,27 @@ server <- function(input, output, session) {
     df$v <- as.numeric(df$v) / 1e6
     if (nrow(df) == 0) { plot.new(); text(0.5, 0.5, "No N50 data"); return() }
     par(mar = c(5, 14, 3, 1))
-    barplot(df$v, names.arg = df$accession_name, las = 1, horiz = TRUE,
-            col = "#8b5e9b", main = "N50 (Mb)", xlab = "Mb", cex.names = 0.75)
+    barplot(df$v, names.arg = df$accession_name, las = 1, horiz = TRUE, col = "#8b5e9b", main = "N50 (Mb)", xlab = "Mb", cex.names = 0.75)
   })
   output$qc_gc <- renderPlot({
     con <- connect_db(); on.exit(dbDisconnect(con))
     df <- dbGetQuery(con, "SELECT accession_name, gc_content::text AS v FROM accessions ORDER BY gc_content DESC")
-    df$v <- as.numeric(df$v)
-    par(mar = c(5, 14, 3, 1))
-    barplot(df$v, names.arg = df$accession_name, las = 1, horiz = TRUE,
-            col = "#f5b342", main = "GC Content (%)", xlab = "GC %", cex.names = 0.75)
+    df$v <- as.numeric(df$v); par(mar = c(5, 14, 3, 1))
+    barplot(df$v, names.arg = df$accession_name, las = 1, horiz = TRUE, col = "#f5b342", main = "GC Content (%)", xlab = "GC %", cex.names = 0.75)
   })
   output$qc_table <- renderDT({
     con <- connect_db(); on.exit(dbDisconnect(con))
-    df <- dbGetQuery(con, "
-      SELECT accession_name, species, genome_size, n50, gc_content, contig_count, gene_count
-      FROM accessions ORDER BY genome_size DESC")
+    df <- dbGetQuery(con, "SELECT accession_name, species, genome_size, n50, gc_content, contig_count, gene_count FROM accessions ORDER BY genome_size DESC")
     datatable(df, options = list(pageLength = 15, scrollX = TRUE))
   })
 
-  # ============================================================
-  # SPECIES COMPARISON
-  # ============================================================
+  # ---------- Species Comparison ----------
   shared_matrix <- reactive({
     con <- connect_db(); on.exit(dbDisconnect(con))
     acc <- dbGetQuery(con, "SELECT accession_id, accession_name FROM accessions ORDER BY species, accession_name")
     pa  <- dbGetQuery(con, "SELECT cluster_id, accession_id FROM gene_presence_absence WHERE is_present = TRUE")
     sets <- split(pa$cluster_id, pa$accession_id)
-    acc_order <- acc$accession_id; acc_names <- acc$accession_name
-    n <- length(acc_order)
+    acc_order <- acc$accession_id; acc_names <- acc$accession_name; n <- length(acc_order)
     mat <- matrix(0L, n, n, dimnames = list(acc_names, acc_names))
     for (i in seq_len(n)) for (j in seq_len(n)) {
       si <- sets[[as.character(acc_order[i])]]; sj <- sets[[as.character(acc_order[j])]]
@@ -1310,122 +1127,60 @@ server <- function(input, output, session) {
   output$species_matrix_plot <- renderPlot({
     m <- shared_matrix(); mat <- m$mat; n <- nrow(mat)
     par(mar = c(8, 14, 4, 2), xpd = TRUE)
-    plot(NA, xlim = c(0, n), ylim = c(0, n), xaxt = "n", yaxt = "n",
-         xlab = "", ylab = "", bty = "n",
-         main = "Shared Pan-Gene Clusters Between Accessions")
+    plot(NA, xlim = c(0, n), ylim = c(0, n), xaxt = "n", yaxt = "n", xlab = "", ylab = "", bty = "n", main = "Shared Pan-Gene Clusters Between Accessions")
     maxv <- max(mat)
     for (i in 1:n) for (j in 1:n) {
       v <- mat[i, j]
-      col <- if (i == j) "#08261a" else {
-        intensity <- v / maxv
-        rgb(0.9 - 0.75*intensity, 0.95 - 0.5*intensity, 0.9 - 0.6*intensity)
-      }
+      col <- if (i == j) "#08261a" else { intensity <- v / maxv; rgb(0.9 - 0.75*intensity, 0.95 - 0.5*intensity, 0.9 - 0.6*intensity) }
       rect(j - 1, n - i, j, n - i + 1, col = col, border = "white")
       text_col <- if (i == j || v > maxv * 0.6) "white" else "#08261a"
-      text(j - 0.5, n - i + 0.5, labels = formatC(v, format="d", big.mark=","),
-           cex = 0.55, col = text_col, font = 2)
+      text(j - 0.5, n - i + 0.5, labels = formatC(v, format="d", big.mark=","), cex = 0.55, col = text_col, font = 2)
     }
     axis(1, at = (1:n) - 0.5, labels = m$names, las = 2, tick = FALSE, cex.axis = 0.7)
     axis(2, at = (n:1) - 0.5, labels = m$names, las = 2, tick = FALSE, cex.axis = 0.7)
   })
   output$species_matrix_table <- renderDT({
-    m <- shared_matrix()
-    df <- as.data.frame(m$mat)
-    df <- cbind(Accession = rownames(df), df)
+    m <- shared_matrix(); df <- as.data.frame(m$mat); df <- cbind(Accession = rownames(df), df)
     datatable(df, options = list(pageLength = 20, scrollX = TRUE))
   })
 
-  # ============================================================
-  # HEATMAP
-  # ============================================================
+  # ---------- Heatmap ----------
   output$presence_heatmap <- renderPlot({
     con <- connect_db(); on.exit(dbDisconnect(con))
     type_filter <- input$heatmap_type
-    where_clause <- ""
-    if (!is.null(type_filter) && type_filter != "All") {
-      where_clause <- paste0("WHERE pc.cluster_type = '", type_filter, "'")
-    }
-    clu <- dbGetQuery(con, paste0("
-      SELECT pc.cluster_id, pc.cluster_name, pc.cluster_type,
-             pc.presence_across_accessions::text AS pres
-      FROM pan_gene_clusters pc ", where_clause, "
-      ORDER BY pc.presence_across_accessions DESC, pc.gene_count DESC, pc.cluster_name
-      LIMIT 100"))
+    where_clause <- if (!is.null(type_filter) && type_filter != "All") paste0("WHERE pc.cluster_type = '", type_filter, "'") else ""
+    clu <- dbGetQuery(con, paste0("SELECT pc.cluster_id, pc.cluster_name, pc.cluster_type, pc.presence_across_accessions::text AS pres FROM pan_gene_clusters pc ", where_clause, " ORDER BY pc.presence_across_accessions DESC, pc.gene_count DESC, pc.cluster_name LIMIT 100"))
     if (nrow(clu) == 0) { plot.new(); text(0.5, 0.5, "No clusters", cex = 1.4); return() }
-
     acc <- dbGetQuery(con, "SELECT accession_id, accession_name FROM accessions ORDER BY species, accession_name")
     acc_order <- acc$accession_name
-    pa <- dbGetQuery(con, "
-      SELECT gpa.cluster_id, a.accession_name
-      FROM gene_presence_absence gpa
-      JOIN accessions a ON gpa.accession_id = a.accession_id
-      WHERE gpa.is_present = TRUE")
+    pa <- dbGetQuery(con, "SELECT gpa.cluster_id, a.accession_name FROM gene_presence_absence gpa JOIN accessions a ON gpa.accession_id = a.accession_id WHERE gpa.is_present = TRUE")
     mat <- matrix(0, nrow = nrow(clu), ncol = length(acc_order))
     rownames(mat) <- clu$cluster_name; colnames(mat) <- acc_order
     for (i in seq_len(nrow(pa))) {
-      r <- which(clu$cluster_id == pa$cluster_id[i])
-      c <- which(acc_order == pa$accession_name[i])
-      if (length(r) == 1 && length(c) == 1) mat[r, c] <- 1
+      r <- which(clu$cluster_id == pa$cluster_id[i]); cc <- which(acc_order == pa$accession_name[i])
+      if (length(r) == 1 && length(cc) == 1) mat[r, cc] <- 1
     }
     n <- nrow(mat); m <- ncol(mat)
     par(mar = c(7, 20, 3, 1))
-    plot(NA, xlim = c(0, m), ylim = c(0, n), xaxt = "n", yaxt = "n",
-         xlab = "", ylab = "",
-         main = paste0("Top 100 ", input$heatmap_type, " clusters"), bty = "n")
+    plot(NA, xlim = c(0, m), ylim = c(0, n), xaxt = "n", yaxt = "n", xlab = "", ylab = "", main = paste0("Top 100 ", input$heatmap_type, " clusters"), bty = "n")
     for (i in 1:n) for (j in 1:m) {
-      rect(j - 1, i - 1, j, i,
-           col = if (mat[i, j] == 1) "#1a4d38" else "#e6eae8",
-           border = "white", lwd = 0.5)
+      rect(j - 1, i - 1, j, i, col = if (mat[i, j] == 1) "#1a4d38" else "#e6eae8", border = "white", lwd = 0.5)
     }
     axis(1, at = (1:m) - 0.5, labels = colnames(mat), las = 2, cex.axis = 0.75, tick = FALSE)
     axis(2, at = (1:n) - 0.5, labels = rownames(mat), las = 2, cex.axis = 0.55, tick = FALSE)
-    legend("topright", inset = c(-0.22, 0),
-           legend = c("Present", "Absent"),
-           fill = c("#1a4d38", "#e6eae8"), bty = "n", cex = 0.8, xpd = TRUE)
+    legend("topright", inset = c(-0.22, 0), legend = c("Present", "Absent"), fill = c("#1a4d38", "#e6eae8"), bty = "n", cex = 0.8, xpd = TRUE)
   })
 
-  # ============================================================
-  # DOWNLOADS
-  # ============================================================
-  output$dl_genes <- downloadHandler("genes.csv", function(f) {
-    con <- connect_db(); on.exit(dbDisconnect(con))
-    write.csv(dbGetQuery(con, "SELECT * FROM genes"), f, row.names = FALSE)
-  })
-  output$dl_clusters <- downloadHandler("pan_gene_clusters.csv", function(f) {
-    con <- connect_db(); on.exit(dbDisconnect(con))
-    write.csv(dbGetQuery(con, "SELECT * FROM pan_gene_clusters"), f, row.names = FALSE)
-  })
-  output$dl_accessions <- downloadHandler("accessions.csv", function(f) {
-    con <- connect_db(); on.exit(dbDisconnect(con))
-    write.csv(dbGetQuery(con, "SELECT * FROM accessions"), f, row.names = FALSE)
-  })
-  output$dl_presence <- downloadHandler("gene_presence_absence.csv", function(f) {
-    con <- connect_db(); on.exit(dbDisconnect(con))
-    write.csv(dbGetQuery(con, "SELECT * FROM gene_presence_absence"), f, row.names = FALSE)
-  })
-  output$dl_go <- downloadHandler("go_annotations.csv", function(f) {
-    con <- connect_db(); on.exit(dbDisconnect(con))
-    write.csv(dbGetQuery(con, "SELECT * FROM go_annotations LIMIT 100000"), f, row.names = FALSE)
-  })
-  output$dl_kegg <- downloadHandler("kegg_ko.csv", function(f) {
-    con <- connect_db(); on.exit(dbDisconnect(con))
-    write.csv(dbGetQuery(con, "SELECT * FROM kegg_ko"), f, row.names = FALSE)
-  })
-  output$dl_path <- downloadHandler("kegg_pathways.csv", function(f) {
-    con <- connect_db(); on.exit(dbDisconnect(con))
-    write.csv(dbGetQuery(con, "SELECT * FROM kegg_pathways LIMIT 100000"), f, row.names = FALSE)
-  })
-  output$dl_kog <- downloadHandler("kog_annotations.csv", function(f) {
-    con <- connect_db(); on.exit(dbDisconnect(con))
-    write.csv(dbGetQuery(con, "SELECT * FROM kog_annotations"), f, row.names = FALSE)
-  })
-
-  output$dl_crispr <- downloadHandler("crispr_guides.csv", function(f) {
-    con <- connect_db(); on.exit(dbDisconnect(con))
-    write.csv(dbGetQuery(con, "SELECT * FROM crispr_guides LIMIT 500000"), f, row.names = FALSE)
-  })
-
+  # ---------- Downloads ----------
+  output$dl_genes <- downloadHandler("genes.csv", function(f) { con <- connect_db(); on.exit(dbDisconnect(con)); write.csv(dbGetQuery(con, "SELECT * FROM genes"), f, row.names = FALSE) })
+  output$dl_clusters <- downloadHandler("pan_gene_clusters.csv", function(f) { con <- connect_db(); on.exit(dbDisconnect(con)); write.csv(dbGetQuery(con, "SELECT * FROM pan_gene_clusters"), f, row.names = FALSE) })
+  output$dl_accessions <- downloadHandler("accessions.csv", function(f) { con <- connect_db(); on.exit(dbDisconnect(con)); write.csv(dbGetQuery(con, "SELECT * FROM accessions"), f, row.names = FALSE) })
+  output$dl_presence <- downloadHandler("gene_presence_absence.csv", function(f) { con <- connect_db(); on.exit(dbDisconnect(con)); write.csv(dbGetQuery(con, "SELECT * FROM gene_presence_absence"), f, row.names = FALSE) })
+  output$dl_go <- downloadHandler("go_annotations.csv", function(f) { con <- connect_db(); on.exit(dbDisconnect(con)); write.csv(dbGetQuery(con, "SELECT * FROM go_annotations LIMIT 100000"), f, row.names = FALSE) })
+  output$dl_kegg <- downloadHandler("kegg_ko.csv", function(f) { con <- connect_db(); on.exit(dbDisconnect(con)); write.csv(dbGetQuery(con, "SELECT * FROM kegg_ko"), f, row.names = FALSE) })
+  output$dl_path <- downloadHandler("kegg_pathways.csv", function(f) { con <- connect_db(); on.exit(dbDisconnect(con)); write.csv(dbGetQuery(con, "SELECT * FROM kegg_pathways LIMIT 100000"), f, row.names = FALSE) })
+  output$dl_kog <- downloadHandler("kog_annotations.csv", function(f) { con <- connect_db(); on.exit(dbDisconnect(con)); write.csv(dbGetQuery(con, "SELECT * FROM kog_annotations"), f, row.names = FALSE) })
+  output$dl_crispr <- downloadHandler("crispr_guides.csv", function(f) { con <- connect_db(); on.exit(dbDisconnect(con)); write.csv(dbGetQuery(con, "SELECT * FROM crispr_guides LIMIT 500000"), f, row.names = FALSE) })
 }
 
-# ============================================================
 shinyApp(ui, server)
