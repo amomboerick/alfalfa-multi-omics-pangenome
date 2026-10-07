@@ -1,0 +1,13 @@
+accession_id,accession_name,species,subspecies,cultivar,ploidy,genome_size,gc_content,n50,contig_count,gene_count,description,created_at
+1,M_arabica,Medicago arabica,,,diploid,511136221,33.88,64674077,8,45938,Imported from M_arabica.fa,2026-09-17 14:38:57.764613
+2,M_lupulina,Medicago lupulina,,,diploid,573500281,33.92,72440278,8,33868,Imported from M_lupulina.fa,2026-09-17 14:39:18.387638
+3,M_polymorpha,Medicago polymorpha,,,diploid,425137697,33.38,56434408,8,40070,Imported from M_polymorpha.fa,2026-09-17 14:39:36.125029
+4,M_ruthenica_landa,Medicago ruthenica,,Landa,diploid,828615181,35.91,112688965,8,55839,Imported from M_ruthenica_landa.fa,2026-09-17 14:40:00.071388
+5,M_ruthenica_zhiwusuo,Medicago ruthenica,,Zhiwusuo,diploid,825324265,35.91,105675294,8,56497,Imported from M_ruthenica_zhiwusuo.fa,2026-09-17 14:40:30.545737
+6,M_sativa_XJDY,Medicago sativa,,XJDY,diploid,679496605,34.14,87242343,8,170352,Imported from M_sativa_XJDY.fa,2026-09-17 14:41:00.590113
+7,M_sativa_ZM1,Medicago sativa,,ZM1,diploid,794464373,34.29,102287719,8,52405,Imported from M_sativa_ZM1.fa,2026-09-17 14:41:44.075282
+8,M_sativa_ZM4_hap4,Medicago sativa,,ZM4,diploid,770629025,34.16,98510643,8,193260,Imported from M_sativa_ZM4_hap4.fa,2026-09-17 14:42:14.844042
+9,M_sativa_ssp_caerulea_landa,Medicago sativa,caerulea,Landa,diploid,781065036,34.18,102487784,8,53331,Imported from M_sativa_ssp_caerulea_landa.fa,2026-09-17 14:43:00.388397
+10,M_sativa_ssp_caerulea_long,Medicago sativa,caerulea,Long,diploid,777897168,34.52,97369479,8,50491,Imported from M_sativa_ssp_caerulea_long.fa,2026-09-17 14:43:35.163076
+11,M_truncatula_A17,Medicago truncatula,,A17,diploid,494467734,34.33,63897308,8,54237,Imported from M_truncatula_A17.fa,2026-09-17 14:44:12.28138
+12,M_truncatula_HM078,Medicago truncatula,,HM078,diploid,481190222,34.09,62416031,8,39527,Imported from M_truncatula_HM078.fa,2026-09-17 14:44:45.405172

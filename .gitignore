@@ -1,0 +1,74 @@
+# ============================================================
+# AlfaPan — Git ignore file
+# Excludes large data, tools, intermediate files
+# ============================================================
+
+# --- Data (large, external) ---
+data/accessions/
+data/proteins/
+data/annotations/
+combined_proteins*.faa
+protein_db.dmnd
+*.dmnd
+
+# --- Tool binaries (users download separately) ---
+tools/
+
+# --- DIAMOND / BLAST intermediate files ---
+DB
+DB.*
+DB_h
+DB_h.*
+blast.log
+blast_all.tsv
+diamond_clusters_*.tsv
+batch_*.tsv
+batches/
+
+# --- Large archives and extracted folders ---
+Medicago_pangenome_annotation/
+Medicago_pangenome_annotation.tar.gz
+orthofinder_input/
+
+# --- Working directories ---
+tmp/
+bin/
+repo/
+
+# --- Backup files ---
+app.R.bak
+app.R.before_ai_reinstall
+app_OLD_backup.R
+test_app.R
+
+# --- Secrets (never push) ---
+.Renviron
+.env
+
+# --- Diagnostic dumps from analysis ---
+*_dump.txt
+scripts/*_dump.txt
+
+# --- Manuscript working files ---
+manuscript/rebuild/
+manuscript/draft_extracted.csv
+manuscript/draft_full_text.txt
+manuscript/manuscript_cleaned_preview.csv
+manuscript/*_BACKUP_*.docx
+manuscript/AlfaPan.docx
+manuscript/AlfaPan_v2.docx
+
+# --- Analysis intermediate CSVs (keep only summary tables and figures) ---
+analysis/*/*.rds
+analysis/*/*.log
+
+# --- Large HTML ---
+pan_genome.html
+
+# --- OS / IDE junk ---
+.DS_Store
+Thumbs.db
+.Rhistory
+.RData
+.Rproj.user/
+*.swp

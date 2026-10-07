@@ -1,0 +1,4 @@
+"cluster_type","n_candidates","median_ratio","mean_gene_count"
+"core",547,8.2,492.7
+"dispensable",106,7.94,162
+"soft_core",239,7.69,463.1

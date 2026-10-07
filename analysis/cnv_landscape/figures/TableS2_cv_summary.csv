@@ -1,0 +1,4 @@
+"cluster_type","n_clusters","mean_cv","median_cv","pct_cv_gt_1"
+"core",561,0.611,0.569,4.28
+"dispensable",3509,0.279,0.333,1.4
+"soft_core",300,0.553,0.516,4

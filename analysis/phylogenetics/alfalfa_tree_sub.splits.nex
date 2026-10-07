@@ -1,0 +1,69 @@
+#nexus
+
+BEGIN Taxa;
+DIMENSIONS ntax=12;
+TAXLABELS
+[1] 'M_arabica'
+[2] 'M_lupulina'
+[3] 'M_polymorpha'
+[4] 'M_ruthenica_landa'
+[5] 'M_ruthenica_zhiwusuo'
+[6] 'M_sativa_XJDY'
+[7] 'M_sativa_ZM1'
+[8] 'M_sativa_ZM4_hap4'
+[9] 'M_sativa_ssp_caerulea_landa'
+[10] 'M_sativa_ssp_caerulea_long'
+[11] 'M_truncatula_A17'
+[12] 'M_truncatula_HM078'
+;
+END; [Taxa]
+
+BEGIN Splits;
+DIMENSIONS ntax=12 nsplits=42;
+FORMAT labels=no weights=yes confidences=no intervals=no;
+MATRIX
+	100	 2,
+	100	 9,
+	100	 2 9,
+	100	 6,
+	100	 2 6 9,
+	100	 4,
+	100	 5,
+	89	 4 5,
+	46	 2 4 5 6 9,
+	100	 7,
+	100	 8,
+	96	 7 8,
+	100	 10,
+	10	 7 8 10,
+	100	 1 3 11 12,
+	100	 11,
+	100	 12,
+	100	 11 12,
+	100	 1 3,
+	100	 3,
+	100	 1,
+	42	 2 6 9 10,
+	78	 1 3 7 8 11 12,
+	12	 2 5 6 9,
+	10	 4 10,
+	6	 4 7 8 10,
+	0	 1 3 7 10 11 12,
+	1	 7 10,
+	0	 1 3 10 11 12,
+	4	 2 5 6 8 9,
+	4	 4 7 10,
+	1	 1 3 4 5 11 12,
+	0	 1 3 4 10 11 12,
+	1	 4 5 10,
+	0	 2 6 8 9 10,
+	0	 1 3 7 11 12,
+	0	 1 3 7,
+	0	 1 7,
+	1	 2 5 6 9 10,
+	0	 1 3 4 11 12,
+	0	 4 7,
+	0	 4 7 8,
+;
+END; [Splits]
+

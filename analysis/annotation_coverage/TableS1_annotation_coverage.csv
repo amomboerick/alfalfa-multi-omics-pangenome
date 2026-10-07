@@ -1,0 +1,13 @@
+"cluster_type","annotation","percent"
+"core","GO",80.51
+"core","KEGG KO",52.48
+"core","KOG",92.88
+"private","GO",63.14
+"private","KEGG KO",41.01
+"private","KOG",81.86
+"soft_core","GO",83.55
+"soft_core","KEGG KO",55.67
+"soft_core","KOG",94.71
+"dispensable","GO",70.21
+"dispensable","KEGG KO",46.34
+"dispensable","KOG",85.41
