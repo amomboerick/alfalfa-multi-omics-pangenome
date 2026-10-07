@@ -72,3 +72,5 @@ Thumbs.db
 .RData
 .Rproj.user/
 *.swpstaged_files.txt 
+# --- Manuscript (not public before publication) ---
+manuscript/
