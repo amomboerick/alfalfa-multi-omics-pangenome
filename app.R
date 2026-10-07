@@ -169,6 +169,7 @@ ui <- fluidPage(
       });
     ")),
     tags$meta(name = "viewport", content = "width=device-width, initial-scale=1.0"),
+    tags$link(rel = "stylesheet", href = "custom.css"),
     tags$style(HTML("
     html, body { min-height: 100%; }
     body {
@@ -519,13 +520,13 @@ ui <- fluidPage(
     div(class = "masthead",
       div(class = "masthead-inner",
         h1(
-          span(class = "logo-leaf", shiny::icon("leaf")),
+          span(class = "logo-photo", tags$img(src = "alfalfa_logo.jpg", alt = "Alfalfa")),
           "Alfalfa Multi-Omics Pan-Genome Database"
         ),
-        div(class = "subtitle",
-          shiny::icon("dna"),
-          " A comprehensive genomic, transcriptomic, and CRISPR resource for the Medicago genus"
-        ),
+
+
+
+
         div(class = "meta-row",
           span(class = "meta-badge", shiny::icon("code-branch"), "Version", span(class = "val", "2.6")),
           span(class = "meta-badge", shiny::icon("calendar"), "Updated", span(class = "val", as.character(Sys.Date()))),

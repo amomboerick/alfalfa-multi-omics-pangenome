@@ -1,0 +1,36 @@
+/* ============================================================
+   AlfaPan custom styling — external overrides
+   ============================================================ */
+
+/* Photo logo — circular crop, sized to header */
+.masthead h1 .logo-photo {
+  display: inline-block !important;
+  width: 60px !important;
+  height: 60px !important;
+  border-radius: 50% !important;
+  overflow: hidden !important;
+  vertical-align: middle !important;
+  margin-right: 14px !important;
+  border: 3px solid #FFFFFF !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18) !important;
+}
+
+.masthead h1 .logo-photo img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
+}
+
+/* Header background — warm cream gradient */
+.masthead {
+  background: linear-gradient(135deg, #FDF6EC 0%, #EDE3CE 100%) !important;
+}
+
+/* Hide any leftover subtitle just in case */
+.masthead .subtitle {
+  display: none !important;
+}
+.masthead h1 { color: #1a4d38 !important; }
+.masthead .meta-badge { color: #3B3B3B !important; border-color: rgba(26,77,56,0.3) !important; }
+.masthead .meta-badge .val { color: #1a4d38 !important; font-weight: 700 !important; }
